@@ -143,7 +143,7 @@ const App: React.FC = () => {
           <BottomNav 
             currentView={state.view} 
             onNavigate={handleNavigate} 
-            onCreateClick={openCreateModal} 
+            onCreateClick={() => handleNavigate('DASHBOARD')} 
           />
         ) : undefined
       }
