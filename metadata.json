@@ -1,0 +1,7 @@
+{
+  "name": "LifeTales",
+  "description": "A multimodal travel story writer that turns your voice notes and photos into beautiful, illustrated narratives using AI agents.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
