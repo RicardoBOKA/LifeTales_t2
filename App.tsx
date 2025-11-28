@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Layout } from './components/Layout';
 import { BottomNav } from './components/BottomNav';
 import { Button } from './components/Button';
@@ -6,105 +6,41 @@ import { Dashboard } from './views/Dashboard';
 import { SpaceView } from './views/SpaceView';
 import { SettingsView } from './views/SettingsView';
 import { MemoriesView } from './views/MemoriesView';
-import { AppState, StorySpace, ViewState } from './types';
+import { ViewState } from './src/types';
+import { useAppState } from './src/hooks/useAppState';
 import { X } from 'lucide-react';
 
-// Mock Data / Local Storage Helper
-const STORAGE_KEY = 'lifetales_data';
-
-const INITIAL_STATE: AppState = {
-  view: 'DASHBOARD',
-  activeSpaceId: null,
-  showCreateModal: false,
-  spaces: [
-    {
-      id: 'demo-1',
-      title: 'Weekend in Kyoto',
-      description: 'A short trip to see the autumn leaves.',
-      coverImage: 'https://picsum.photos/800/600?random=1',
-      startDate: Date.now() - 86400000 * 2,
-      notes: [],
-      generatedStory: [],
-      isGenerating: false
-    }
-  ]
-};
-
 const App: React.FC = () => {
-  const [state, setState] = useState<AppState>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : INITIAL_STATE;
-  });
+  const {
+    state,
+    navigate,
+    openCreateModal,
+    closeCreateModal,
+    createSpace,
+    selectSpace,
+    updateSpace,
+    backToDashboard,
+    activeSpace
+  } = useAppState();
 
   // Local state for the creation modal fields
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
-
-  const handleNavigate = (view: ViewState) => {
-    setState(prev => ({ ...prev, view, activeSpaceId: null }));
-  };
-
-  const openCreateModal = () => {
-    setState(prev => ({ ...prev, showCreateModal: true }));
+  const handleOpenCreateModal = () => {
+    openCreateModal();
     setNewTitle('');
     setNewDescription('');
   };
 
-  const closeCreateModal = () => {
-    setState(prev => ({ ...prev, showCreateModal: false }));
-  };
-
   const handleCreateSpace = () => {
     if (!newTitle.trim() || !newDescription.trim()) return;
-
-    const newSpace: StorySpace = {
-      id: Date.now().toString(),
-      title: newTitle,
-      description: newDescription,
-      coverImage: `https://picsum.photos/800/600?random=${Date.now()}`,
-      startDate: Date.now(),
-      notes: [],
-      generatedStory: [],
-      isGenerating: false
-    };
-    
-    setState(prev => ({
-      ...prev,
-      spaces: [newSpace, ...prev.spaces],
-      activeSpaceId: newSpace.id,
-      view: 'SPACE_DETAIL',
-      showCreateModal: false
-    }));
+    createSpace(newTitle, newDescription);
   };
 
-  const handleSelectSpace = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      activeSpaceId: id,
-      view: 'SPACE_DETAIL'
-    }));
+  const handleNavigate = (view: ViewState) => {
+    navigate(view);
   };
-
-  const handleBackToDashboard = () => {
-    setState(prev => ({
-      ...prev,
-      activeSpaceId: null,
-      view: 'DASHBOARD'
-    }));
-  };
-
-  const handleUpdateSpace = (updatedSpace: StorySpace) => {
-    setState(prev => ({
-      ...prev,
-      spaces: prev.spaces.map(s => s.id === updatedSpace.id ? updatedSpace : s)
-    }));
-  };
-
-  const activeSpace = state.spaces.find(s => s.id === state.activeSpaceId);
 
   // Render content based on current view
   const renderContent = () => {
@@ -113,8 +49,8 @@ const App: React.FC = () => {
         return (
           <Dashboard 
             spaces={state.spaces} 
-            onRequestCreate={openCreateModal}
-            onSelectSpace={handleSelectSpace}
+            onRequestCreate={handleOpenCreateModal}
+            onSelectSpace={selectSpace}
           />
         );
       case 'SPACE_DETAIL':
@@ -122,8 +58,8 @@ const App: React.FC = () => {
         return (
           <SpaceView 
             space={activeSpace} 
-            onBack={handleBackToDashboard}
-            onUpdateSpace={handleUpdateSpace}
+            onBack={backToDashboard}
+            onUpdateSpace={updateSpace}
           />
         );
       case 'SETTINGS':

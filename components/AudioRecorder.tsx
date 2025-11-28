@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { Mic, Square, Loader2 } from 'lucide-react';
-import { Button } from './Button';
+import { useAudioRecording } from '../src/hooks/useAudioRecording';
 
 interface AudioRecorderProps {
   onRecordingComplete: (audioBlob: Blob) => void;
@@ -8,69 +8,23 @@ interface AudioRecorderProps {
 }
 
 export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onRecordingComplete, isProcessing }) => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<number | null>(null);
+  const { isRecording, duration, formatTime, startRecording, stopRecording } = useAudioRecording();
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
-    };
-  }, []);
-
-  const startRecording = async () => {
+  const handleStart = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        onRecordingComplete(blob);
-        
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      
-      // Start timer
-      setDuration(0);
-      timerRef.current = window.setInterval(() => {
-        setDuration(d => d + 1);
-      }, 1000);
-
+      await startRecording();
     } catch (err) {
-      console.error("Error accessing microphone:", err);
       alert("Could not access microphone. Please ensure permissions are granted.");
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (timerRef.current) {
-        window.clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+  const handleStop = async () => {
+    try {
+      const blob = await stopRecording();
+      onRecordingComplete(blob);
+    } catch (err) {
+      console.error("Error stopping recording:", err);
     }
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -95,14 +49,14 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onRecordingComplet
            </div>
         ) : !isRecording ? (
           <button
-            onClick={startRecording}
+            onClick={handleStart}
             className="h-16 w-16 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center shadow-lg transform transition active:scale-95"
           >
             <Mic className="h-8 w-8" />
           </button>
         ) : (
           <button
-            onClick={stopRecording}
+            onClick={handleStop}
             className="h-16 w-16 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg z-10 relative transform transition active:scale-95"
           >
             <Square className="h-6 w-6 fill-current" />
