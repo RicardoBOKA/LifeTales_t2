@@ -1,17 +1,16 @@
 import React from 'react';
 import { StorySpace } from '../types';
 import { Plus, BookOpen, Clock, ChevronRight } from 'lucide-react';
-import { Button } from '../components/Button';
 
 interface DashboardProps {
   spaces: StorySpace[];
-  onCreateSpace: () => void;
+  onRequestCreate: () => void;
   onSelectSpace: (id: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ spaces, onCreateSpace, onSelectSpace }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, onSelectSpace }) => {
   return (
-    <div className="p-6 pb-24 space-y-8 animate-fade-in">
+    <div className="p-6 pb-24 space-y-8 animate-fade-in relative h-full overflow-y-auto">
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-serif font-bold text-ink">LifeTales</h1>
@@ -21,7 +20,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ spaces, onCreateSpace, onS
 
       {/* Hero / Create New */}
       <div 
-        onClick={onCreateSpace}
+        onClick={onRequestCreate}
         className="bg-ink text-soft p-6 rounded-3xl shadow-xl relative overflow-hidden cursor-pointer group transition-transform active:scale-[0.98]"
       >
         <div className="relative z-10">

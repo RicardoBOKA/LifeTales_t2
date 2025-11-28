@@ -10,13 +10,23 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 // ---------------------------------------------------------
 export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<string> => {
   try {
+    // Ensure clean mimeType (e.g. 'audio/webm;codecs=opus' -> 'audio/webm')
+    // The API sometimes rejects complex mime-types in inlineData causing XHR errors
+    const cleanMimeType = mimeType.split(';')[0].trim();
+    
+    // Check for missing API key to avoid opaque 500 errors from the proxy
+    if (!process.env.API_KEY) {
+      console.warn("API_KEY is missing. Transcription mocked.");
+      return "Transcription unavailable (Missing API Key).";
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
           {
             inlineData: {
-              mimeType: mimeType,
+              mimeType: cleanMimeType,
               data: base64Audio
             }
           },
@@ -27,10 +37,11 @@ export const transcribeAudio = async (base64Audio: string, mimeType: string): Pr
       }
     });
     
-    return response.text || "Transcription failed.";
+    return response.text || "Transcription failed (no text returned).";
   } catch (error) {
-    console.error("Transcription error:", error);
-    return "Error transcribing audio.";
+    console.error("Transcription error details:", error);
+    // Return a graceful error string so the UI flow continues
+    return "Transcription unavailable (Network/API Error).";
   }
 };
 
@@ -39,6 +50,15 @@ export const transcribeAudio = async (base64Audio: string, mimeType: string): Pr
 // ---------------------------------------------------------
 export const generateStoryFromNotes = async (notes: Note[], spaceTitle: string): Promise<Chapter[]> => {
   if (notes.length === 0) return [];
+  
+  if (!process.env.API_KEY) {
+    console.warn("API_KEY is missing. Story generation mocked.");
+    return [{
+      title: "Sample Chapter (Demo)",
+      content: "This is a placeholder story because the API Key is missing. Please add your Gemini API Key to generate real stories from your notes.",
+      illustrationPrompt: "A placeholder image"
+    }];
+  }
 
   // Prepare context from notes
   const context = notes.map(n => {
@@ -101,6 +121,8 @@ export const generateStoryFromNotes = async (notes: Note[], spaceTitle: string):
 // 3. Visual Agent
 // ---------------------------------------------------------
 export const generateChapterIllustration = async (prompt: string): Promise<string | undefined> => {
+  if (!process.env.API_KEY) return undefined;
+
   try {
     // Using gemini-2.5-flash-image as requested for general image generation
     const response = await ai.models.generateContent({
