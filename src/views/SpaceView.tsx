@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { StorySpace, NoteType } from '../src/types';
+import { StorySpace, NoteType } from '../types';
 import { ArrowLeft, Mic, Sparkles, Wand2 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { AudioRecorder } from '../components/AudioRecorder';
-import { DayGroup } from '../src/components/DayGroup';
-import { transcribeAudio } from '../src/services/gemini';
-import { useGroupedNotes } from '../src/hooks/useGroupedNotes';
-import { useNotes } from '../src/hooks/useNotes';
-import { useStoryGeneration } from '../src/hooks/useStoryGeneration';
-import { formatDateKey } from '../src/utils/dateHelpers';
+import { DayGroup } from '../components/DayGroup';
+import { transcribeAudio } from '../services/gemini';
+import { useGroupedNotes } from '../hooks/useGroupedNotes';
+import { useNotes } from '../hooks/useNotes';
+import { useStoryGeneration } from '../hooks/useStoryGeneration';
+import { formatDateKey } from '../utils/dateHelpers';
 
 interface SpaceViewProps {
   space: StorySpace;
@@ -236,3 +236,4 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     </div>
   );
 };
+

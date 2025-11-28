@@ -42,3 +42,4 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, onNavigate, o
     </div>
   );
 };
+

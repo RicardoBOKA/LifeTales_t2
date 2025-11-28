@@ -1,6 +1,6 @@
 import React from 'react';
 import { Mic, Square, Loader2 } from 'lucide-react';
-import { useAudioRecording } from '../src/hooks/useAudioRecording';
+import { useAudioRecording } from '../hooks/useAudioRecording';
 
 interface AudioRecorderProps {
   onRecordingComplete: (audioBlob: Blob) => void;
@@ -72,3 +72,4 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({ onRecordingComplet
     </div>
   );
 };
+

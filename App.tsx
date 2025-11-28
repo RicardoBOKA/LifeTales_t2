@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
-import { Layout } from './components/Layout';
-import { BottomNav } from './components/BottomNav';
-import { Button } from './components/Button';
-import { Dashboard } from './views/Dashboard';
-import { SpaceView } from './views/SpaceView';
-import { SettingsView } from './views/SettingsView';
-import { MemoriesView } from './views/MemoriesView';
+import { Layout, BottomNav, Button } from './src/components';
+import { Dashboard, SpaceView, SettingsView, MemoriesView } from './src/views';
 import { ViewState } from './src/types';
 import { useAppState } from './src/hooks/useAppState';
 import { X } from 'lucide-react';

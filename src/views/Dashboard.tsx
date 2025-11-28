@@ -71,3 +71,4 @@ export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, o
     </div>
   );
 };
+

@@ -23,3 +23,4 @@ export const Layout: React.FC<LayoutProps> = ({ children, bottomNav }) => {
     </div>
   );
 };
+

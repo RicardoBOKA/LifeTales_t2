@@ -121,3 +121,4 @@ export const CreateSpaceView: React.FC<CreateSpaceViewProps> = ({
     </div>
   );
 };
+

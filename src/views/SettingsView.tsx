@@ -1,6 +1,6 @@
 import React from 'react';
 import { Settings, Music, Mic, Image as ImageIcon, Sliders } from 'lucide-react';
-import { useSettings } from '../src/hooks/useSettings';
+import { useSettings } from '../hooks/useSettings';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -166,3 +166,4 @@ export const SettingsView: React.FC = () => {
     </div>
   );
 };
+
