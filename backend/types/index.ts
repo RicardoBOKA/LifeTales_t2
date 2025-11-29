@@ -25,12 +25,12 @@ export interface Chapter {
   title: string;
   content: string;
   illustrationPrompt?: string;
-  sourceNoteId?: string;              // Reference to the source note
-  userImageIds?: string[];            // ALL images from this note
-  generatedImageUrl?: string;         // AI-generated image if no user images
+  sourceNoteId?: string;              // Reference to the source note for this chapter
+  sourceNoteTimestamp?: number;       // Timestamp of the source note for display
+  userImageIds?: string[];            // ALL user-uploaded images for this chapter
+  generatedImageUrl?: string;         // AI-generated illustration (only if no user images)
+  userImageUrls?: string[];           // Resolved URLs for user images (populated at runtime)
 }
-
-export type GenerationStep = 'idle' | 'analyzing' | 'writing' | 'images' | 'done';
 
 export interface StorySpace {
   id: string;

@@ -1,7 +1,32 @@
 import { useState, useCallback } from 'react';
-import { Chapter, Note, StorySettings, DEFAULT_SETTINGS, GenerationStep } from '../types';
+import { Chapter, Note, StorySettings, DEFAULT_SETTINGS } from '../types';
 import { generateStoryFromNotes, generateChapterIllustration } from '../services/gemini';
 import { fileStorage } from '../services/fileStorage';
+
+/**
+ * Generation workflow steps
+ */
+export type GenerationStep = 
+  | 'idle'
+  | 'analyzing'   // Analyzing notes...
+  | 'writing'     // Writing story...
+  | 'images'      // Processing images...
+  | 'done';       // Complete
+
+export interface GenerationProgress {
+  step: GenerationStep;
+  currentChapter?: number;
+  totalChapters?: number;
+  message: string;
+}
+
+const STEP_MESSAGES: Record<GenerationStep, string> = {
+  idle: '',
+  analyzing: 'Analyzing your moments...',
+  writing: 'Crafting your story...',
+  images: 'Processing images...',
+  done: 'Story complete!'
+};
 
 export function useStoryGeneration(
   initialChapters: Chapter[],
@@ -9,28 +34,53 @@ export function useStoryGeneration(
 ) {
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationStep, setGenerationStep] = useState<GenerationStep>('idle');
-  const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
+  const [progress, setProgress] = useState<GenerationProgress>({
+    step: 'idle',
+    message: ''
+  });
 
+  /**
+   * Update progress state
+   */
+  const updateProgress = (step: GenerationStep, extra?: Partial<GenerationProgress>) => {
+    setProgress({
+      step,
+      message: STEP_MESSAGES[step],
+      ...extra
+    });
+  };
+
+  /**
+   * Resolve user image URLs from fileStorage
+   */
+  const resolveUserImageUrls = async (imageIds: string[]): Promise<string[]> => {
+    const urls: string[] = [];
+    for (const id of imageIds) {
+      const url = await fileStorage.getFileUrl(id);
+      if (url) urls.push(url);
+    }
+    return urls;
+  };
+
+  /**
+   * Main story generation function with workflow feedback
+   */
   const generateStory = useCallback(async (
     notes: Note[], 
     spaceTitle: string,
     settings: StorySettings = DEFAULT_SETTINGS
   ) => {
     setIsGenerating(true);
-    setChapters([]); // Clear previous chapters for visual feedback
+    setChapters([]); // Clear existing chapters to show workflow
     onUpdate([]);
 
     try {
-      // === STEP 1: ANALYZING ===
-      setGenerationStep('analyzing');
-      setGenerationProgress({ current: 0, total: notes.length });
+      // ========== STEP 1: ANALYZING ==========
+      updateProgress('analyzing');
+      await new Promise(resolve => setTimeout(resolve, 500)); // Brief delay for UX
       
-      // Small delay for visual feedback
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // === STEP 2: WRITING ===
-      setGenerationStep('writing');
+      // ========== STEP 2: WRITING ==========
+      updateProgress('writing');
       
       const generatedChapters = await generateStoryFromNotes(
         notes, 
@@ -38,88 +88,102 @@ export function useStoryGeneration(
         settings
       );
       
+      // Initial update with chapters (no images yet)
       setChapters(generatedChapters);
       onUpdate(generatedChapters);
 
-      // === STEP 3: IMAGES ===
-      setGenerationStep('images');
+      // ========== STEP 3: IMAGES ==========
+      updateProgress('images', { 
+        currentChapter: 0, 
+        totalChapters: generatedChapters.length 
+      });
       
-      const updatedChaptersWithImages = [...generatedChapters];
+      const updatedChapters = [...generatedChapters];
+      let generatedImagesCount = 0;
       
-      // Count chapters needing image generation
-      const chaptersNeedingImages = generatedChapters.filter(
-        ch => (!ch.userImageIds || ch.userImageIds.length === 0) && ch.illustrationPrompt
-      );
-      setGenerationProgress({ current: 0, total: chaptersNeedingImages.length });
-      
-      let imagesGenerated = 0;
-      
-      for (let i = 0; i < updatedChaptersWithImages.length; i++) {
-        const chapter = updatedChaptersWithImages[i];
+      for (let i = 0; i < updatedChapters.length; i++) {
+        const chapter = updatedChapters[i];
         
-        // If chapter has user images, they're already referenced by IDs
-        // The UI will load them from fileStorage
-        if (chapter.userImageIds && chapter.userImageIds.length > 0) {
-          // User images exist - no AI generation needed
-          continue;
-        }
+        updateProgress('images', {
+          currentChapter: i + 1,
+          totalChapters: updatedChapters.length,
+          message: `Processing images (${i + 1}/${updatedChapters.length})...`
+        });
         
-        // No user images - generate an AI illustration
-        if (chapter.illustrationPrompt) {
-          const imageUrl = await generateChapterIllustration(
-            chapter.illustrationPrompt, 
-            settings.imageStyle
-          );
+        // Check if chapter has user images
+        const hasUserImages = chapter.userImageIds && chapter.userImageIds.length > 0;
+        
+        if (hasUserImages) {
+          // Resolve all user image URLs
+          const userImageUrls = await resolveUserImageUrls(chapter.userImageIds!);
+          updatedChapters[i] = { 
+            ...chapter, 
+            userImageUrls 
+          };
+        } else {
+          // No user images - generate AI illustration if allowed
+          // Respect imagesPerChapter limit for AI generation
+          const shouldGenerate = generatedImagesCount < settings.imagesPerChapter * updatedChapters.length;
           
-          if (imageUrl) {
-            updatedChaptersWithImages[i] = { 
-              ...chapter, 
-              generatedImageUrl: imageUrl
-            };
-            setChapters([...updatedChaptersWithImages]);
-            onUpdate([...updatedChaptersWithImages]);
+          if (shouldGenerate && chapter.illustrationPrompt) {
+            const generatedUrl = await generateChapterIllustration(
+              chapter.illustrationPrompt,
+              settings.imageStyle
+            );
+            
+            if (generatedUrl) {
+              updatedChapters[i] = {
+                ...chapter,
+                generatedImageUrl: generatedUrl
+              };
+              generatedImagesCount++;
+            }
           }
-          
-          imagesGenerated++;
-          setGenerationProgress({ current: imagesGenerated, total: chaptersNeedingImages.length });
         }
+        
+        // Update state progressively
+        setChapters([...updatedChapters]);
+        onUpdate([...updatedChapters]);
       }
 
-      // === STEP 4: DONE ===
-      setGenerationStep('done');
+      // ========== DONE ==========
+      updateProgress('done');
       
-      // Reset to idle after a short delay
+      // Reset to idle after a brief moment
       setTimeout(() => {
-        setGenerationStep('idle');
+        updateProgress('idle');
       }, 2000);
 
-      return updatedChaptersWithImages;
+      return updatedChapters;
     } catch (error) {
       console.error('Story generation error:', error);
-      setGenerationStep('idle');
+      updateProgress('idle');
       throw error;
     } finally {
       setIsGenerating(false);
     }
   }, [onUpdate]);
 
+  /**
+   * Sync chapters from external source
+   */
   const syncChapters = useCallback((externalChapters: Chapter[]) => {
     setChapters(externalChapters);
   }, []);
 
-  const resetGeneration = useCallback(() => {
-    setGenerationStep('idle');
-    setGenerationProgress({ current: 0, total: 0 });
+  /**
+   * Reset progress to idle
+   */
+  const resetProgress = useCallback(() => {
+    updateProgress('idle');
   }, []);
 
   return {
     chapters,
     isGenerating,
-    generationStep,
-    generationProgress,
+    progress,
     generateStory,
     syncChapters,
-    resetGeneration
+    resetProgress
   };
 }
-

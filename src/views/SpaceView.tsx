@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StorySpace, NoteType, Note, Chapter, GenerationStep } from '../types';
-import { ArrowLeft, Clock, Sparkles, Wand2, Image as ImageIcon, Search, PenTool, Palette, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { StorySpace, NoteType, Note, Chapter } from '../types';
+import { ArrowLeft, Clock, Sparkles, Wand2, Image as ImageIcon, Calendar, ChevronLeft, ChevronRight, Loader2, Check, PenTool, Search } from 'lucide-react';
 import { Button } from '../components/Button';
 import { InputComposer, NoteInput } from '../components/InputComposer';
 import { DayGroup } from '../components/DayGroup';
@@ -8,87 +8,128 @@ import { transcribeAudio } from '../services/gemini';
 import { fileStorage } from '../services/fileStorage';
 import { useGroupedNotes } from '../hooks/useGroupedNotes';
 import { useNotes } from '../hooks/useNotes';
-import { useStoryGeneration } from '../hooks/useStoryGeneration';
+import { useStoryGeneration, GenerationStep } from '../hooks/useStoryGeneration';
 import { useSettings } from '../hooks/useSettings';
 import { formatDateKey } from '../utils/dateHelpers';
 
-/**
- * Generation Workflow Steps Component
- */
-const GenerationWorkflow: React.FC<{
-  step: GenerationStep;
-  progress: { current: number; total: number };
-}> = ({ step, progress }) => {
-  const steps = [
-    { id: 'analyzing', label: 'Analyzing notes', icon: Search },
-    { id: 'writing', label: 'Writing story', icon: PenTool },
-    { id: 'images', label: 'Generating images', icon: Palette },
-    { id: 'done', label: 'Complete!', icon: CheckCircle2 },
-  ];
+interface SpaceViewProps {
+  space: StorySpace;
+  onBack: () => void;
+  onUpdateSpace: (updatedSpace: StorySpace) => void;
+}
 
-  const currentIndex = steps.findIndex(s => s.id === step);
+type Tab = 'TIMELINE' | 'STORY';
+
+/**
+ * Progress Step indicator component
+ */
+const ProgressStep: React.FC<{
+  step: GenerationStep;
+  currentStep: GenerationStep;
+  label: string;
+  icon: React.ReactNode;
+}> = ({ step, currentStep, label, icon }) => {
+  const steps: GenerationStep[] = ['analyzing', 'writing', 'images', 'done'];
+  const currentIndex = steps.indexOf(currentStep);
+  const stepIndex = steps.indexOf(step);
+  
+  const isActive = step === currentStep;
+  const isComplete = stepIndex < currentIndex || currentStep === 'done';
+  const isPending = stepIndex > currentIndex;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center space-y-8">
-      <div className="relative">
-        <div className="absolute inset-0 bg-primary opacity-20 blur-xl rounded-full animate-pulse"></div>
-        <Wand2 className="h-16 w-16 text-primary relative z-10 animate-bounce" />
+    <div className={`flex flex-col items-center gap-2 transition-all duration-300 ${
+      isActive ? 'scale-110' : ''
+    }`}>
+      <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 ${
+        isComplete ? 'bg-green-500 text-white' :
+        isActive ? 'bg-primary text-white animate-pulse' :
+        'bg-stone-200 text-stone-400'
+      }`}>
+        {isComplete ? <Check className="h-6 w-6" /> : icon}
       </div>
-      
-      <div className="space-y-2">
-        <h3 className="text-2xl font-serif font-bold text-ink">Crafting your story...</h3>
-        <p className="text-stone-500 text-sm max-w-xs mx-auto">
-          Our AI agents are transforming your moments into a beautiful narrative
-        </p>
+      <span className={`text-xs font-medium transition-colors ${
+        isActive ? 'text-primary' : isComplete ? 'text-green-600' : 'text-stone-400'
+      }`}>
+        {label}
+      </span>
+    </div>
+  );
+};
+
+/**
+ * Generation Workflow Display
+ */
+const GenerationWorkflow: React.FC<{
+  currentStep: GenerationStep;
+  message: string;
+  currentChapter?: number;
+  totalChapters?: number;
+}> = ({ currentStep, message, currentChapter, totalChapters }) => {
+  if (currentStep === 'idle') return null;
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 space-y-8">
+      {/* Progress Steps */}
+      <div className="flex items-center gap-4">
+        <ProgressStep 
+          step="analyzing" 
+          currentStep={currentStep} 
+          label="Analyze" 
+          icon={<Search className="h-5 w-5" />}
+        />
+        <div className={`w-12 h-0.5 transition-colors ${
+          ['writing', 'images', 'done'].includes(currentStep) ? 'bg-green-500' : 'bg-stone-200'
+        }`} />
+        <ProgressStep 
+          step="writing" 
+          currentStep={currentStep} 
+          label="Write" 
+          icon={<PenTool className="h-5 w-5" />}
+        />
+        <div className={`w-12 h-0.5 transition-colors ${
+          ['images', 'done'].includes(currentStep) ? 'bg-green-500' : 'bg-stone-200'
+        }`} />
+        <ProgressStep 
+          step="images" 
+          currentStep={currentStep} 
+          label="Images" 
+          icon={<ImageIcon className="h-5 w-5" />}
+        />
+        <div className={`w-12 h-0.5 transition-colors ${
+          currentStep === 'done' ? 'bg-green-500' : 'bg-stone-200'
+        }`} />
+        <ProgressStep 
+          step="done" 
+          currentStep={currentStep} 
+          label="Done" 
+          icon={<Check className="h-5 w-5" />}
+        />
       </div>
 
-      {/* Step indicators */}
-      <div className="flex items-center gap-2 bg-stone-50 p-4 rounded-2xl">
-        {steps.map((s, idx) => {
-          const Icon = s.icon;
-          const isActive = s.id === step;
-          const isComplete = idx < currentIndex;
-          
-          return (
-            <React.Fragment key={s.id}>
-              <div className={`flex flex-col items-center gap-1 transition-all duration-300 ${
-                isActive ? 'scale-110' : ''
-              }`}>
-                <div className={`p-3 rounded-full transition-all duration-500 ${
-                  isComplete ? 'bg-green-500 text-white' :
-                  isActive ? 'bg-primary text-white animate-pulse' :
-                  'bg-stone-200 text-stone-400'
-                }`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <span className={`text-xs font-medium transition-colors ${
-                  isActive ? 'text-primary' : isComplete ? 'text-green-600' : 'text-stone-400'
-                }`}>
-                  {s.label}
-                </span>
-              </div>
-              {idx < steps.length - 1 && (
-                <div className={`h-0.5 w-8 transition-colors duration-500 ${
-                  isComplete ? 'bg-green-500' : 'bg-stone-200'
-                }`} />
-              )}
-            </React.Fragment>
-          );
-        })}
-      </div>
-
-      {/* Progress indicator for images step */}
-      {step === 'images' && progress.total > 0 && (
-        <div className="w-full max-w-xs space-y-2">
-          <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
-              style={{ width: `${(progress.current / progress.total) * 100}%` }}
-            />
-          </div>
-          <p className="text-xs text-stone-500">
-            Generating illustration {progress.current} of {progress.total}
+      {/* Current action message */}
+      <div className="text-center space-y-2">
+        <div className="flex items-center justify-center gap-2">
+          {currentStep !== 'done' && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
+          <p className="text-lg font-medium text-ink">{message}</p>
+        </div>
+        {currentChapter && totalChapters && (
+          <p className="text-sm text-stone-500">
+            Chapter {currentChapter} of {totalChapters}
           </p>
+        )}
+      </div>
+
+      {/* Animated dots */}
+      {currentStep !== 'done' && (
+        <div className="flex gap-1">
+          {[0, 1, 2].map(i => (
+            <div 
+              key={i}
+              className="w-2 h-2 bg-primary rounded-full animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -99,146 +140,126 @@ const GenerationWorkflow: React.FC<{
  * Image Gallery Component for chapters with multiple images
  */
 const ImageGallery: React.FC<{
-  userImageIds: string[];
-  generatedImageUrl?: string;
-}> = ({ userImageIds, generatedImageUrl }) => {
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  images: string[];
+  isUserImages: boolean;
+}> = ({ images, isUserImages }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadImages = async () => {
-      setLoading(true);
-      const urls: string[] = [];
-      
-      // Load user images
-      for (const id of userImageIds) {
-        const url = await fileStorage.getFileUrl(id);
-        if (url) urls.push(url);
-      }
-      
-      // Add generated image if no user images
-      if (urls.length === 0 && generatedImageUrl) {
-        urls.push(generatedImageUrl);
-      }
-      
-      setImageUrls(urls);
-      setLoading(false);
-    };
-    
-    loadImages();
-  }, [userImageIds, generatedImageUrl]);
+  if (images.length === 0) return null;
 
-  if (loading) {
+  if (images.length === 1) {
     return (
-      <div className="aspect-[4/3] bg-stone-100 rounded-2xl animate-pulse flex items-center justify-center">
-        <Sparkles className="h-6 w-6 text-stone-300" />
+      <div className="relative rounded-2xl overflow-hidden shadow-lg border-4 border-white">
+        <img 
+          src={images[0]} 
+          className="w-full h-auto object-cover" 
+          alt={isUserImages ? 'Your photo' : 'AI illustration'}
+        />
+        <div className={`absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${
+          isUserImages ? 'bg-blue-500/90 text-white' : 'bg-purple-500/90 text-white'
+        }`}>
+          {isUserImages ? (
+            <><ImageIcon className="h-3 w-3" /> Your photo</>
+          ) : (
+            <><Sparkles className="h-3 w-3" /> AI generated</>
+          )}
+        </div>
       </div>
     );
   }
 
-  if (imageUrls.length === 0) {
-    return null;
-  }
-
-  const hasMultiple = imageUrls.length > 1;
-  const isUserImage = userImageIds.length > 0;
-
+  // Multiple images - show gallery with navigation
   return (
-    <div className="relative rounded-2xl overflow-hidden shadow-lg border-4 border-white">
-      {/* Main image */}
-      <img 
-        src={imageUrls[currentIndex]} 
-        className="w-full h-auto object-cover aspect-[4/3]" 
-        alt={isUserImage ? 'Your photo' : 'AI illustration'} 
-      />
-      
-      {/* Navigation arrows for multiple images */}
-      {hasMultiple && (
-        <>
-          <button 
-            onClick={() => setCurrentIndex(i => (i - 1 + imageUrls.length) % imageUrls.length)}
-            className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <button 
-            onClick={() => setCurrentIndex(i => (i + 1) % imageUrls.length)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
-          
-          {/* Dots indicator */}
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-            {imageUrls.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentIndex(idx)}
-                className={`h-2 rounded-full transition-all ${
-                  idx === currentIndex ? 'w-6 bg-white' : 'w-2 bg-white/50'
-                }`}
-              />
-            ))}
-          </div>
-        </>
-      )}
-      
-      {/* Badge showing image source */}
-      <div className={`absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${
-        isUserImage ? 'bg-blue-500/90 text-white' : 'bg-purple-500/90 text-white'
-      }`}>
-        {isUserImage ? (
-          <><ImageIcon className="h-3 w-3" /> {imageUrls.length} photo{imageUrls.length > 1 ? 's' : ''}</>
-        ) : (
-          <><Sparkles className="h-3 w-3" /> AI generated</>
-        )}
+    <div className="relative">
+      <div className="relative rounded-2xl overflow-hidden shadow-lg border-4 border-white">
+        <img 
+          src={images[currentIndex]} 
+          className="w-full h-auto object-cover transition-opacity duration-300" 
+          alt={`Photo ${currentIndex + 1} of ${images.length}`}
+        />
+        
+        {/* Badge */}
+        <div className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 bg-blue-500/90 text-white">
+          <ImageIcon className="h-3 w-3" /> {currentIndex + 1}/{images.length}
+        </div>
+
+        {/* Navigation arrows */}
+        <button 
+          onClick={() => setCurrentIndex(i => (i - 1 + images.length) % images.length)}
+          className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <button 
+          onClick={() => setCurrentIndex(i => (i + 1) % images.length)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Thumbnail dots */}
+      <div className="flex justify-center gap-2 mt-3">
+        {images.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setCurrentIndex(i)}
+            className={`w-2 h-2 rounded-full transition-all ${
+              i === currentIndex ? 'bg-primary w-4' : 'bg-stone-300 hover:bg-stone-400'
+            }`}
+          />
+        ))}
       </div>
     </div>
   );
 };
 
 /**
- * Chapter Card Component
+ * Chapter Article Component
  */
-const ChapterCard: React.FC<{
+const ChapterArticle: React.FC<{
   chapter: Chapter;
   index: number;
-  sourceNote?: Note;
   isLast: boolean;
   isGenerating: boolean;
-}> = ({ chapter, index, sourceNote, isLast, isGenerating }) => {
-  const timestamp = sourceNote ? new Date(sourceNote.timestamp).toLocaleString('fr-FR', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit'
-  }) : null;
+}> = ({ chapter, index, isLast, isGenerating }) => {
+  // Determine which images to show
+  const hasUserImages = chapter.userImageUrls && chapter.userImageUrls.length > 0;
+  const hasGeneratedImage = !!chapter.generatedImageUrl;
+  const imagesToShow = hasUserImages ? chapter.userImageUrls! : (hasGeneratedImage ? [chapter.generatedImageUrl!] : []);
 
   return (
-    <article className="space-y-5">
-      {/* Chapter header */}
+    <article className="space-y-6">
+      {/* Chapter Header */}
       <div className="flex items-start gap-4">
-        <span className="text-5xl font-serif text-primary/15 font-bold leading-none">{index + 1}</span>
-        <div className="flex-1 pt-2">
-          <h2 className="text-xl font-serif font-bold text-ink leading-tight">{chapter.title}</h2>
-          {timestamp && (
-            <p className="text-xs text-stone-400 mt-1 flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {timestamp}
-            </p>
+        <span className="text-4xl font-serif text-primary/20 font-bold shrink-0">{index + 1}</span>
+        <div className="flex-1">
+          <h2 className="text-xl font-serif font-bold text-ink">{chapter.title}</h2>
+          {chapter.sourceNoteTimestamp && (
+            <div className="flex items-center gap-1 mt-1 text-xs text-stone-400">
+              <Calendar className="h-3 w-3" />
+              <span>{new Date(chapter.sourceNoteTimestamp).toLocaleDateString('fr-FR', {
+                day: 'numeric',
+                month: 'long',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}</span>
+            </div>
           )}
         </div>
       </div>
       
       {/* Images */}
-      <ImageGallery 
-        userImageIds={chapter.userImageIds || []} 
-        generatedImageUrl={chapter.generatedImageUrl}
-      />
+      {imagesToShow.length > 0 ? (
+        <ImageGallery images={imagesToShow} isUserImages={hasUserImages} />
+      ) : isGenerating ? (
+        <div className="aspect-[4/3] bg-stone-100 rounded-2xl animate-pulse flex items-center justify-center">
+          <Sparkles className="h-6 w-6 text-stone-300" />
+        </div>
+      ) : null}
 
       {/* Content */}
-      <div className="prose prose-stone prose-p:font-serif prose-p:text-lg prose-p:leading-relaxed text-ink/90 prose-p:mb-4">
+      <div className="prose prose-stone prose-p:font-serif prose-p:text-lg prose-p:leading-relaxed text-ink/90">
         {chapter.content.split('\n').filter(p => p.trim()).map((para, i) => (
           <p key={i}>{para}</p>
         ))}
@@ -249,7 +270,7 @@ const ChapterCard: React.FC<{
         <div className="flex justify-center py-6">
           <div className="flex items-center gap-3">
             <div className="h-px w-12 bg-stone-200"></div>
-            <div className="h-2 w-2 bg-primary/30 rounded-full"></div>
+            <div className="h-2 w-2 bg-stone-200 rounded-full"></div>
             <div className="h-px w-12 bg-stone-200"></div>
           </div>
         </div>
@@ -257,14 +278,6 @@ const ChapterCard: React.FC<{
     </article>
   );
 };
-
-interface SpaceViewProps {
-  space: StorySpace;
-  onBack: () => void;
-  onUpdateSpace: (updatedSpace: StorySpace) => void;
-}
-
-type Tab = 'TIMELINE' | 'STORY';
 
 export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpace }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TIMELINE');
@@ -278,14 +291,7 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     (updatedNotes) => onUpdateSpace({ ...space, notes: updatedNotes })
   );
 
-  const { 
-    chapters, 
-    isGenerating, 
-    generationStep,
-    generationProgress,
-    generateStory, 
-    syncChapters 
-  } = useStoryGeneration(
+  const { chapters, isGenerating, progress, generateStory, syncChapters } = useStoryGeneration(
     space.generatedStory,
     (updatedChapters) => onUpdateSpace({ ...space, generatedStory: updatedChapters })
   );
@@ -394,6 +400,9 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     }
   };
 
+  // Check if we're actively generating (not idle and not done)
+  const showWorkflow = isGenerating && progress.step !== 'idle' && progress.step !== 'done';
+
   return (
     <div className="flex flex-col h-screen bg-paper">
       {/* Header */}
@@ -465,11 +474,17 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
         {/* TAB: STORY */}
         {activeTab === 'STORY' && (
           <div className="min-h-full bg-white">
-            {/* Show workflow when generating */}
-            {isGenerating && generationStep !== 'idle' && generationStep !== 'done' ? (
-              <GenerationWorkflow step={generationStep} progress={generationProgress} />
+            {/* Generation Workflow Display */}
+            {showWorkflow ? (
+              <GenerationWorkflow 
+                currentStep={progress.step}
+                message={progress.message}
+                currentChapter={progress.currentChapter}
+                totalChapters={progress.totalChapters}
+              />
             ) : chapters.length === 0 ? (
-              <div className="flex flex-col items-center justify-center min-h-[60vh] p-12 text-center">
+              // Empty state - prompt to generate
+              <div className="flex flex-col items-center justify-center h-full p-12 text-center">
                  <div className="bg-soft p-6 rounded-full mb-6">
                     <Sparkles className="h-8 w-8 text-primary" />
                  </div>
@@ -478,13 +493,14 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                    You have collected {notes.length} moment{notes.length !== 1 ? 's' : ''}. 
                    <br/>Let's turn them into a beautiful chapter of your life.
                  </p>
-                 <Button onClick={handleGenerateStory} size="lg" className="w-full shadow-xl shadow-primary/20">
+                 <Button onClick={handleGenerateStory} size="lg" className="w-full shadow-xl shadow-primary/20" disabled={notes.length === 0}>
                     Generate Story
                  </Button>
               </div>
             ) : (
+              // Story Display
               <div className="animate-fade-in">
-                 {/* Story header */}
+                 {/* Cover */}
                  <div className="h-64 relative overflow-hidden">
                     <div className="absolute inset-0 bg-ink/20 z-10"></div>
                     <img src={space.coverImage} className="w-full h-full object-cover" alt="" />
@@ -492,29 +508,25 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                       <h1 className="text-3xl font-serif font-bold text-white leading-tight">{space.title}</h1>
                       <p className="text-white/80 text-sm mt-2 font-medium tracking-wide">{space.description}</p>
                       <p className="text-white/60 text-xs mt-2">
-                        {chapters.length} section{chapters.length !== 1 ? 's' : ''} • {notes.length} moment{notes.length !== 1 ? 's' : ''}
+                        {chapters.length} chapter{chapters.length !== 1 ? 's' : ''} • Mode: {settings.storyMode}
                       </p>
                     </div>
                  </div>
 
                  {/* Chapters */}
-                 <div className="p-8 space-y-4 pb-32">
-                    {chapters.map((chapter, idx) => {
-                      const sourceNote = notes.find(n => n.id === chapter.sourceNoteId);
-                      return (
-                        <ChapterCard
-                          key={chapter.sourceNoteId || idx}
-                          chapter={chapter}
-                          index={idx}
-                          sourceNote={sourceNote}
-                          isLast={idx === chapters.length - 1}
-                          isGenerating={isGenerating}
-                        />
-                      );
-                    })}
+                 <div className="p-8 space-y-8 pb-32">
+                    {chapters.map((chapter, idx) => (
+                      <ChapterArticle 
+                        key={chapter.sourceNoteId || idx}
+                        chapter={chapter}
+                        index={idx}
+                        isLast={idx === chapters.length - 1}
+                        isGenerating={isGenerating}
+                      />
+                    ))}
                  </div>
                  
-                 {/* Regenerate button */}
+                 {/* Regenerate Button */}
                  <div className="fixed bottom-6 right-6 z-30">
                     <Button 
                       onClick={handleGenerateStory} 
@@ -522,8 +534,11 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                       className="shadow-2xl flex gap-2"
                       disabled={isGenerating}
                     >
-                       <Sparkles className={`h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} /> 
-                       {isGenerating ? 'Rewriting...' : 'Rewrite'}
+                       {isGenerating ? (
+                         <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</>
+                       ) : (
+                         <><Sparkles className="h-4 w-4" /> Regenerate</>
+                       )}
                     </Button>
                  </div>
               </div>
