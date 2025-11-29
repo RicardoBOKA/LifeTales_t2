@@ -11,9 +11,10 @@ export function useNotes(
   const addNote = useCallback((
     type: NoteType,
     content: string,
-    transcription?: string
+    transcription?: string,
+    audioUrl?: string
   ) => {
-    const noteData = createNote(type, content, transcription);
+    const noteData = createNote(type, content, transcription, audioUrl);
     const newNote: Note = {
       id: Date.now().toString(),
       ...noteData

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Note, NoteType } from '../types';
-import { Mic, FileText, Plus } from 'lucide-react';
+import { Mic, FileText, Plus, ImagePlus, X } from 'lucide-react';
 import { formatTime } from '../utils/dateHelpers';
 
 interface NoteCardProps {
@@ -13,6 +13,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate }) => {
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [tempTitle, setTempTitle] = useState(note.title || (note.type === NoteType.AUDIO ? 'Voice Note' : 'Text Note'));
   const [tempDesc, setTempDesc] = useState(note.description || '');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const saveTitle = () => {
     setIsEditingTitle(false);
@@ -26,6 +27,22 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate }) => {
     if (tempDesc !== note.description) {
       onUpdate({ ...note, description: tempDesc });
     }
+  };
+
+  const handleImageAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const imageDataUrl = reader.result as string;
+      onUpdate({ ...note, attachedImageUrl: imageDataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeAttachedImage = () => {
+    onUpdate({ ...note, attachedImageUrl: undefined });
   };
 
   return (
@@ -93,14 +110,63 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate }) => {
         </div>
 
         {note.type === NoteType.AUDIO && (
-            <div className="space-y-2 mt-3">
-              {/* Mock Audio Player Visualization */}
-              <div className="h-8 bg-stone-100 rounded-full flex items-center px-3 gap-1 overflow-hidden">
-                {[...Array(20)].map((_, i) => (
-                  <div key={i} className="w-1 bg-stone-300 rounded-full" style={{ height: `${Math.random() * 100}%`}}></div>
-                ))}
-              </div>
-              <p className="text-sm text-ink/80 italic pl-1 border-l-2 border-stone-200">"{note.transcription}"</p>
+            <div className="space-y-3 mt-3">
+              {/* Real Audio Player */}
+              {note.audioUrl ? (
+                <audio 
+                  controls 
+                  src={note.audioUrl} 
+                  className="w-full h-10 rounded-lg"
+                  style={{ filter: 'sepia(20%) saturate(70%) grayscale(10%)' }}
+                />
+              ) : (
+                <div className="h-10 bg-stone-100 rounded-lg flex items-center justify-center">
+                  <span className="text-xs text-stone-400">Audio non disponible</span>
+                </div>
+              )}
+              
+              {/* Transcription */}
+              {note.transcription && (
+                <p className="text-sm text-ink/80 italic pl-3 border-l-2 border-stone-200">"{note.transcription}"</p>
+              )}
+
+              {/* Attached Image */}
+              {note.attachedImageUrl && (
+                <div className="relative mt-2">
+                  <img 
+                    src={note.attachedImageUrl} 
+                    alt="Photo attachée" 
+                    className="w-full max-h-48 object-cover rounded-xl border border-stone-200"
+                  />
+                  <button
+                    onClick={removeAttachedImage}
+                    className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                    title="Supprimer la photo"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+
+              {/* Add Photo Button */}
+              {!note.attachedImageUrl && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 text-xs text-stone-400 hover:text-primary transition-colors py-1"
+                >
+                  <ImagePlus className="h-4 w-4" />
+                  <span>Ajouter une photo</span>
+                </button>
+              )}
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageAttach}
+                className="hidden"
+              />
             </div>
         )}
         {note.type === NoteType.TEXT && <p className="text-sm text-ink mt-2">{note.content}</p>}

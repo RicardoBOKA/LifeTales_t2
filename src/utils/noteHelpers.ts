@@ -43,12 +43,14 @@ export const getDefaultNoteTitle = (type: NoteType): string => {
 export const createNote = (
   type: NoteType,
   content: string,
-  transcription?: string
+  transcription?: string,
+  audioUrl?: string
 ): Omit<Note, 'id'> => {
   return {
     type,
     content,
     transcription,
+    audioUrl,
     timestamp: Date.now(),
     title: getDefaultNoteTitle(type),
     description: ''

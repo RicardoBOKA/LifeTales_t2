@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StorySpace, NoteType } from '../types';
-import { ArrowLeft, Mic, Sparkles, Wand2 } from 'lucide-react';
+import { ArrowLeft, Mic, Sparkles, Wand2, Download } from 'lucide-react';
 import { Button } from '../components/Button';
 import { AudioRecorder } from '../components/AudioRecorder';
 import { DayGroup } from '../components/DayGroup';
@@ -8,7 +8,9 @@ import { transcribeAudio } from '../services/gemini';
 import { useGroupedNotes } from '../hooks/useGroupedNotes';
 import { useNotes } from '../hooks/useNotes';
 import { useStoryGeneration } from '../hooks/useStoryGeneration';
+import { useSettings } from '../hooks/useSettings';
 import { formatDateKey } from '../utils/dateHelpers';
+import { exportToMarkdown, exportToJSON } from '../utils/storyExport';
 
 interface SpaceViewProps {
   space: StorySpace;
@@ -21,6 +23,9 @@ type Tab = 'TIMELINE' | 'STORY';
 export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpace }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TIMELINE');
   const [isProcessingNote, setIsProcessingNote] = useState(false);
+
+  // Get settings
+  const { settings } = useSettings();
 
   // Use custom hooks
   const { notes, addNote, updateNote, syncNotes } = useNotes(
@@ -59,12 +64,14 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     const reader = new FileReader();
     reader.readAsDataURL(audioBlob);
     reader.onloadend = async () => {
-      const base64Audio = (reader.result as string).split(',')[1];
+      const audioDataUrl = reader.result as string; // Full data URL for playback
+      const base64Audio = audioDataUrl.split(',')[1];
       const mimeType = audioBlob.type;
       
       const transcription = await transcribeAudio(base64Audio, mimeType);
       
-      const newNote = addNote(NoteType.AUDIO, "Voice Note", transcription);
+      // Pass audioDataUrl to persist the audio for playback
+      const newNote = addNote(NoteType.AUDIO, "Voice Note", transcription, audioDataUrl);
 
       // Expand the group for today
       const dateKey = formatDateKey(newNote.timestamp);
@@ -77,11 +84,19 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
   const handleGenerateStory = async () => {
     setActiveTab('STORY');
     try {
-      await generateStory(notes, space.title);
+      await generateStory(notes, space.title, settings);
     } catch (e) {
       console.error(e);
       alert("Failed to generate story. Please try again.");
     }
+  };
+
+  const handleExportMarkdown = () => {
+    exportToMarkdown(space, chapters, settings);
+  };
+
+  const handleExportJSON = () => {
+    exportToJSON(space, chapters, settings);
   };
 
   return (
@@ -197,11 +212,22 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                            <h2 className="text-xl font-serif font-bold text-ink">{chapter.title}</h2>
                          </div>
                          
+                         {/* User image (photo from notes) - displayed first */}
+                         {chapter.userImageUrl && (
+                           <div className="rounded-2xl overflow-hidden shadow-lg transform -rotate-1 border-4 border-white">
+                              <img src={chapter.userImageUrl} className="w-full h-auto object-cover" alt="Your photo" />
+                              <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                                Your photo
+                              </div>
+                           </div>
+                         )}
+                         
+                         {/* AI-generated illustration */}
                          {chapter.illustrationUrl ? (
                            <div className="rounded-2xl overflow-hidden shadow-lg transform rotate-1 border-4 border-white">
                               <img src={chapter.illustrationUrl} className="w-full h-auto object-cover" alt="AI illustration" />
                            </div>
-                         ) : isGenerating ? (
+                         ) : isGenerating && !chapter.userImageUrl ? (
                            <div className="aspect-[4/3] bg-stone-100 rounded-2xl animate-pulse flex items-center justify-center">
                               <Sparkles className="h-6 w-6 text-stone-300" />
                            </div>
@@ -222,8 +248,18 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                     ))}
                  </div>
                  
-                 {/* Floating Action Button to Regenerate */}
-                 <div className="fixed bottom-6 right-6 z-30">
+                 {/* Floating Action Buttons */}
+                 <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-2">
+                    {/* Export dropdown */}
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={handleExportMarkdown}
+                        className="bg-white shadow-lg rounded-full p-3 hover:bg-stone-50 transition-colors"
+                        title="Export as Markdown"
+                      >
+                        <Download className="h-4 w-4 text-stone-600" />
+                      </button>
+                    </div>
                     <Button onClick={handleGenerateStory} variant="primary" className="shadow-2xl flex gap-2">
                        <Sparkles className="h-4 w-4" /> Rewrite
                     </Button>
@@ -236,4 +272,3 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     </div>
   );
 };
-
