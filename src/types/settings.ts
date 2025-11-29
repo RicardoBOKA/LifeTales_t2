@@ -9,7 +9,7 @@ export interface StorySettings {
 }
 
 export const DEFAULT_SETTINGS: StorySettings = {
-  narrativeTone: 'cinematic',
+  narrativeTone: 'neutral',
   storyMode: 'chapter',
   creativity: 1,
   imageStyle: 'illustration',
