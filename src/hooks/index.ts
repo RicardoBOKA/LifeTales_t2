@@ -6,4 +6,5 @@ export * from './useGroupedNotes';
 export * from './useNotes';
 export * from './useStoryGeneration';
 export * from './useAudioRecording';
+export * from './useVideoGeneration';
 

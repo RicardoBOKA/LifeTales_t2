@@ -3,4 +3,5 @@ export * from './geminiClient';
 export * from './transcription.service';
 export * from './story.service';
 export * from './illustration.service';
+export * from './videoScript.service';
 

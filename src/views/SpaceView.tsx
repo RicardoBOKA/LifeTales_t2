@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StorySpace, NoteType, Note, Chapter, GenerationStep } from '../types';
-import { ArrowLeft, Clock, Sparkles, Wand2, Image as ImageIcon, Search, PenTool, Palette, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Clock, Sparkles, Wand2, Image as ImageIcon, Search, PenTool, Palette, CheckCircle2, ChevronLeft, ChevronRight, Video, Download } from 'lucide-react';
 import { Button } from '../components/Button';
 import { InputComposer, NoteInput } from '../components/InputComposer';
 import { DayGroup } from '../components/DayGroup';
@@ -9,6 +9,7 @@ import { fileStorage } from '../services/fileStorage';
 import { useGroupedNotes } from '../hooks/useGroupedNotes';
 import { useNotes } from '../hooks/useNotes';
 import { useStoryGeneration } from '../hooks/useStoryGeneration';
+import { useVideoGeneration } from '../hooks/useVideoGeneration';
 import { useSettings } from '../hooks/useSettings';
 import { formatDateKey } from '../utils/dateHelpers';
 
@@ -264,11 +265,12 @@ interface SpaceViewProps {
   onUpdateSpace: (updatedSpace: StorySpace) => void;
 }
 
-type Tab = 'TIMELINE' | 'STORY';
+type Tab = 'TIMELINE' | 'STORY' | 'VIDEO';
 
 export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpace }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TIMELINE');
   const [isProcessingNote, setIsProcessingNote] = useState(false);
+  const [narratorPhoto, setNarratorPhoto] = useState<Blob | null>(null);
   
   // Get current story generation settings
   const { settings } = useSettings();
@@ -289,6 +291,19 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     space.generatedStory,
     (updatedChapters) => onUpdateSpace({ ...space, generatedStory: updatedChapters })
   );
+
+  const {
+    isGenerating: isGeneratingVideo,
+    step: videoStep,
+    progress: videoProgress,
+    message: videoMessage,
+    error: videoError,
+    videoBlob,
+    script: videoScript,
+    generateVideo,
+    downloadGeneratedVideo,
+    reset: resetVideo
+  } = useVideoGeneration(space.id);
 
   const {
     groupedNoteEntries,
@@ -394,6 +409,38 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     }
   };
 
+  const handleGenerateVideo = async () => {
+    if (chapters.length === 0) {
+      alert("Please generate a story first before creating a video.");
+      return;
+    }
+    
+    // Switch to VIDEO tab
+    setActiveTab('VIDEO');
+    
+    try {
+      await generateVideo(chapters, space.title, settings, {
+        narratorPhotoBlob: narratorPhoto || undefined
+      });
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate video. Please try again.");
+    }
+  };
+
+  const handleDownloadVideo = () => {
+    downloadGeneratedVideo(space.title);
+  };
+
+  const handleNarratorPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      setNarratorPhoto(file);
+    } else if (file) {
+      alert('Please select an image file');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-paper">
       {/* Header */}
@@ -417,6 +464,12 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
             className={`p-2 rounded-full transition-all ${activeTab === 'STORY' ? 'bg-white shadow-sm text-ink' : 'text-stone-400'}`}
           >
             <Sparkles className="h-4 w-4" />
+          </button>
+          <button 
+            onClick={() => setActiveTab('VIDEO')}
+            className={`p-2 rounded-full transition-all ${activeTab === 'VIDEO' ? 'bg-white shadow-sm text-ink' : 'text-stone-400'}`}
+          >
+            <Video className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -514,20 +567,226 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                     })}
                  </div>
                  
-                 {/* Regenerate button */}
-                 <div className="fixed bottom-6 right-6 z-30">
-                    <Button 
-                      onClick={handleGenerateStory} 
-                      variant="primary" 
-                      className="shadow-2xl flex gap-2"
-                      disabled={isGenerating}
-                    >
-                       <Sparkles className={`h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} /> 
-                       {isGenerating ? 'Rewriting...' : 'Rewrite'}
-                    </Button>
+                 {/* Action buttons */}
+                 <div className="fixed bottom-6 right-6 z-30 flex gap-3">
+                      {/* Generate video button */}
+                      <Button 
+                        onClick={handleGenerateVideo} 
+                        variant="secondary" 
+                        className="shadow-2xl flex gap-2"
+                        disabled={isGenerating || isGeneratingVideo}
+                      >
+                         <Video className={`h-4 w-4 ${isGeneratingVideo ? 'animate-pulse' : ''}`} /> 
+                         {isGeneratingVideo ? 'Creating...' : '🎬 Create Video'}
+                      </Button>
+                      
+                      {/* Regenerate story button */}
+                      <Button 
+                        onClick={handleGenerateStory} 
+                        variant="primary" 
+                        className="shadow-2xl flex gap-2"
+                        disabled={isGenerating || isGeneratingVideo}
+                      >
+                         <Sparkles className={`h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} /> 
+                         {isGenerating ? 'Rewriting...' : 'Rewrite'}
+                      </Button>
                  </div>
+                 
+                 {/* Video generation progress overlay */}
+                 {isGeneratingVideo && videoStep !== 'idle' && (
+                   <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-6">
+                     <div className="bg-white rounded-3xl p-8 max-w-md w-full space-y-6 shadow-2xl">
+                       <div className="flex flex-col items-center gap-3">
+                         <div className="relative">
+                           <div className="absolute inset-0 bg-primary opacity-20 blur-xl rounded-full animate-pulse"></div>
+                           <Video className="h-12 w-12 text-primary relative z-10" />
+                         </div>
+                         <h3 className="text-xl font-serif font-bold text-ink">Creating Your Video</h3>
+                       </div>
+                       
+                       <div className="space-y-3">
+                         <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+                           <div 
+                             className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                             style={{ width: `${videoProgress}%` }}
+                           />
+                         </div>
+                         <p className="text-sm text-stone-600 text-center">{videoMessage}</p>
+                         <p className="text-xs text-stone-400 text-center">{Math.round(videoProgress)}% complete</p>
+                       </div>
+                       
+                       {videoError && (
+                         <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                           <p className="text-sm text-red-600">{videoError}</p>
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB: VIDEO */}
+        {activeTab === 'VIDEO' && (
+          <div className="p-6 space-y-6 pb-32">
+            <div className="max-w-4xl mx-auto">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-serif font-bold text-ink mb-2">Video Story</h2>
+                <p className="text-sm text-stone-500">Your moments turned into a narrative video</p>
+              </div>
+
+              {/* Narrator photo upload */}
+              {!videoBlob && (
+                <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                  <label className="flex flex-col gap-3 cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      {narratorPhoto ? (
+                        <>
+                          <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary">
+                            <img 
+                              src={URL.createObjectURL(narratorPhoto)} 
+                              alt="Narrator" 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div>
+                            <span className="block text-sm font-medium text-green-600 mb-1">
+                              ✅ Narrator photo ready!
+                            </span>
+                            <span className="text-xs text-stone-400">
+                              This photo will be animated to tell your story
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-3xl">
+                            📸
+                          </div>
+                          <div>
+                            <span className="block text-sm font-medium text-stone-700 mb-1">
+                              Upload your photo
+                            </span>
+                            <span className="text-xs text-stone-400">
+                              Required to generate your video story
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleNarratorPhotoChange}
+                      className="text-xs text-stone-500 file:mr-2 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 transition-all"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* Generate Video Button */}
+              {!videoBlob && !isGeneratingVideo && (
+                <Button 
+                  onClick={handleGenerateVideo} 
+                  variant="primary" 
+                  className="w-full py-4 text-lg shadow-xl flex gap-3 items-center justify-center"
+                  disabled={!narratorPhoto}
+                >
+                  <Video className="h-6 w-6" /> 
+                  Generate Video Story
+                </Button>
+              )}
+
+              {/* Video generation progress */}
+              {isGeneratingVideo && (
+                <div className="bg-white rounded-2xl p-8 shadow-lg">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-primary opacity-20 blur-xl rounded-full animate-pulse"></div>
+                      <Video className="h-16 w-16 text-primary relative z-10 animate-pulse" />
+                    </div>
+                    <h3 className="text-xl font-serif font-bold text-ink">{videoMessage}</h3>
+                    <div className="w-full bg-stone-100 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-primary to-purple-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${videoProgress}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-sm text-stone-500">{Math.round(videoProgress)}% complete</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Video Player + Script */}
+              {videoBlob && videoScript && (
+                <div className="space-y-6">
+                  {/* Video Player */}
+                  <div className="bg-black rounded-2xl overflow-hidden shadow-2xl">
+                    <video 
+                      src={URL.createObjectURL(videoBlob)} 
+                      controls 
+                      className="w-full"
+                      style={{ maxHeight: '600px' }}
+                    />
+                  </div>
+
+                  {/* Download Button */}
+                  <Button 
+                    onClick={handleDownloadVideo} 
+                    variant="secondary" 
+                    className="w-full py-3 flex gap-2 bg-green-500 hover:bg-green-600 text-white shadow-lg"
+                  >
+                    <Download className="h-5 w-5" /> 
+                    Download Video
+                  </Button>
+
+                  {/* Script */}
+                  <div className="bg-white rounded-2xl p-6 shadow-lg">
+                    <h3 className="text-lg font-serif font-bold text-ink mb-4 flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                      Video Script
+                    </h3>
+                    <div className="space-y-4">
+                      {videoScript.scenes.map((scene, idx) => (
+                        <div key={idx} className="border-l-2 border-primary/30 pl-4">
+                          <div className="text-xs text-stone-400 mb-1">Scene {idx + 1}</div>
+                          <p className="text-sm text-ink/80 leading-relaxed">{scene.narrationText}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Regenerate Button */}
+                  <Button 
+                    onClick={() => {
+                      // Reset and allow regeneration
+                      setActiveTab('VIDEO');
+                    }} 
+                    variant="secondary" 
+                    className="w-full py-3 flex gap-2"
+                  >
+                    <Video className="h-5 w-5" /> 
+                    Generate New Video
+                  </Button>
+                </div>
+              )}
+
+              {videoError && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+                  <h3 className="text-lg font-semibold text-red-600 mb-2">Generation Failed</h3>
+                  <p className="text-sm text-red-600">{videoError}</p>
+                  <Button 
+                    onClick={handleGenerateVideo} 
+                    variant="secondary" 
+                    className="mt-4"
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
