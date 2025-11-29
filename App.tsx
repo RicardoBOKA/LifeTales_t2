@@ -14,6 +14,7 @@ const App: React.FC = () => {
     createSpace,
     selectSpace,
     updateSpace,
+    deleteSpace,
     backToDashboard,
     activeSpace
   } = useAppState();
@@ -46,6 +47,7 @@ const App: React.FC = () => {
             spaces={state.spaces} 
             onRequestCreate={handleOpenCreateModal}
             onSelectSpace={selectSpace}
+            onDeleteSpace={deleteSpace}
           />
         );
       case 'SPACE_DETAIL':

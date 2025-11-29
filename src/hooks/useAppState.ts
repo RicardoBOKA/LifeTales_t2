@@ -75,6 +75,15 @@ export function useAppState() {
     }));
   }, [setState]);
 
+  const deleteSpace = useCallback((id: string) => {
+    setState(prev => ({
+      ...prev,
+      spaces: prev.spaces.filter(s => s.id !== id),
+      activeSpaceId: prev.activeSpaceId === id ? null : prev.activeSpaceId,
+      view: prev.activeSpaceId === id ? 'DASHBOARD' : prev.view
+    }));
+  }, [setState]);
+
   const backToDashboard = useCallback(() => {
     setState(prev => ({
       ...prev,
@@ -94,6 +103,7 @@ export function useAppState() {
     createSpace,
     selectSpace,
     updateSpace,
+    deleteSpace,
     backToDashboard,
     activeSpace
   };

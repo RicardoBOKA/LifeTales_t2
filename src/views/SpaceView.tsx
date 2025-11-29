@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StorySpace, NoteType } from '../types';
-import { ArrowLeft, Mic, Sparkles, Wand2 } from 'lucide-react';
+import { StorySpace, NoteType, Note } from '../types';
+import { ArrowLeft, Clock, Sparkles, Wand2 } from 'lucide-react';
 import { Button } from '../components/Button';
-import { AudioRecorder } from '../components/AudioRecorder';
+import { InputComposer, NoteInput } from '../components/InputComposer';
 import { DayGroup } from '../components/DayGroup';
 import { transcribeAudio } from '../services/gemini';
+import { fileStorage } from '../services/fileStorage';
 import { useGroupedNotes } from '../hooks/useGroupedNotes';
 import { useNotes } from '../hooks/useNotes';
 import { useStoryGeneration } from '../hooks/useStoryGeneration';
@@ -22,8 +23,7 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
   const [activeTab, setActiveTab] = useState<Tab>('TIMELINE');
   const [isProcessingNote, setIsProcessingNote] = useState(false);
 
-  // Use custom hooks
-  const { notes, addNote, updateNote, syncNotes } = useNotes(
+  const { notes, addNote, updateNote, deleteNote, syncNotes } = useNotes(
     space.notes,
     (updatedNotes) => onUpdateSpace({ ...space, notes: updatedNotes })
   );
@@ -41,37 +41,89 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     initializeCollapseState
   } = useGroupedNotes(notes, space.startDate);
 
-  // Sync with external changes
   useEffect(() => {
     syncNotes(space.notes);
     syncChapters(space.generatedStory);
   }, [space]);
 
-  // Initialize collapse state
   useEffect(() => {
     initializeCollapseState();
   }, [initializeCollapseState]);
 
-  const handleAudioRecorded = async (audioBlob: Blob) => {
+  const handleSendNote = async (input: NoteInput) => {
     setIsProcessingNote(true);
-    
-    // Convert Blob to Base64
-    const reader = new FileReader();
-    reader.readAsDataURL(audioBlob);
-    reader.onloadend = async () => {
-      const base64Audio = (reader.result as string).split(',')[1];
-      const mimeType = audioBlob.type;
-      
-      const transcription = await transcribeAudio(base64Audio, mimeType);
-      
-      const newNote = addNote(NoteType.AUDIO, "Voice Note", transcription);
 
-      // Expand the group for today
+    try {
+      const noteData: Partial<Note> = {};
+      
+      // Handle text content (caption)
+      if (input.textContent) {
+        noteData.textContent = input.textContent;
+      }
+      
+      // Handle audio blobs (multiple)
+      if (input.audioBlobs && input.audioBlobs.length > 0) {
+        const audioFileIds: string[] = [];
+        const transcriptions: string[] = [];
+        
+        for (const audioBlob of input.audioBlobs) {
+          const audioFileId = await fileStorage.saveFile(audioBlob, `audio_${Date.now()}.webm`);
+          audioFileIds.push(audioFileId);
+          
+          // Transcribe audio
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve) => {
+            reader.onloadend = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              resolve(base64);
+            };
+            reader.readAsDataURL(audioBlob);
+          });
+          
+          const base64Audio = await base64Promise;
+          const transcription = await transcribeAudio(base64Audio, audioBlob.type);
+          transcriptions.push(transcription);
+        }
+        
+        noteData.audioFileIds = audioFileIds;
+        noteData.transcriptions = transcriptions;
+      }
+      
+      // Handle image files
+      if (input.imageFiles && input.imageFiles.length > 0) {
+        const imageFileIds = await Promise.all(
+          input.imageFiles.map(file => fileStorage.saveFile(file, file.name))
+        );
+        noteData.imageFileIds = imageFileIds;
+      }
+      
+      // Handle video files
+      if (input.videoFiles && input.videoFiles.length > 0) {
+        const videoFileIds = await Promise.all(
+          input.videoFiles.map(file => fileStorage.saveFile(file, file.name))
+        );
+        noteData.videoFileIds = videoFileIds;
+      }
+      
+      // Determine title based on user input or use numbered moment
+      const title = input.title?.trim() || `Moment n°${notes.length + 1}`;
+      
+      // Create the note (all notes are type MOMENT now)
+      const newNote = addNote({
+        type: NoteType.MOMENT,
+        title,
+        ...noteData
+      });
+      
       const dateKey = formatDateKey(newNote.timestamp);
       expandDay(dateKey);
       
+    } catch (error) {
+      console.error("Error adding note:", error);
+      alert("Failed to save note. Please try again.");
+    } finally {
       setIsProcessingNote(false);
-    };
+    }
   };
 
   const handleGenerateStory = async () => {
@@ -93,14 +145,14 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
         </button>
         <div className="flex-1 min-w-0">
             <h2 className="font-serif font-bold text-lg text-ink truncate">{space.title}</h2>
-            <p className="text-xs text-stone-500">{notes.length} fragments collected</p>
+            <p className="text-xs text-stone-500">{notes.length} moment{notes.length !== 1 ? 's' : ''} captured</p>
         </div>
         <div className="flex gap-1 bg-stone-100 p-1 rounded-full shrink-0">
           <button 
             onClick={() => setActiveTab('TIMELINE')}
             className={`p-2 rounded-full transition-all ${activeTab === 'TIMELINE' ? 'bg-white shadow-sm text-ink' : 'text-stone-400'}`}
           >
-            <Mic className="h-4 w-4" />
+            <Clock className="h-4 w-4" />
           </button>
           <button 
             onClick={() => setActiveTab('STORY')}
@@ -114,23 +166,25 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
       {/* Content */}
       <div className="flex-1 overflow-y-auto no-scrollbar relative">
         
-        {/* TAB: TIMELINE */}
+        {/* TAB: TIMELINE (Conversation View) */}
         {activeTab === 'TIMELINE' && (
-          <div className="p-6 space-y-8 pb-32">
-             <div className="bg-gradient-to-b from-primary/5 to-transparent p-6 rounded-3xl mb-8 text-center border border-primary/10">
+          <div className="p-6 space-y-6 pb-32">
+             <div className="bg-gradient-to-b from-primary/5 to-transparent p-6 rounded-3xl text-center border border-primary/10">
                 <p className="text-sm text-ink/70 font-serif italic mb-2 leading-relaxed">
                   "{space.description}"
                 </p>
                 <div className="w-8 h-0.5 bg-primary/20 mx-auto my-3"></div>
-                <p className="text-xs text-stone-400">Record moments as they happen.</p>
+                <p className="text-xs text-stone-400">Capture your moments as they happen</p>
              </div>
 
-             <AudioRecorder onRecordingComplete={handleAudioRecorded} isProcessing={isProcessingNote} />
+             {/* Input Composer */}
+             <InputComposer onSend={handleSendNote} isProcessing={isProcessingNote} />
 
+             {/* Notes Timeline */}
              <div className="mt-8">
                 {notes.length === 0 ? (
-                  <div className="text-center py-8 opacity-50">
-                    <p className="text-sm">No notes yet.</p>
+                  <div className="text-center py-12 opacity-50">
+                    <p className="text-sm text-stone-500">No moments yet. Start by typing, recording, or uploading something!</p>
                   </div>
                 ) : (
                   groupedNoteEntries.map(([dateKey, groupNotes]) => (
@@ -142,6 +196,7 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                       isCollapsed={collapsedDays[dateKey] || false}
                       onToggleCollapse={toggleDayCollapse}
                       onUpdateNote={updateNote}
+                      onDeleteNote={deleteNote}
                     />
                   ))
                 )}
@@ -170,7 +225,7 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                  </div>
                  <h3 className="text-2xl font-serif font-bold text-ink mb-2">Ready to write?</h3>
                  <p className="text-stone-500 mb-8 leading-relaxed">
-                   You have collected {notes.length} moments. 
+                   You have collected {notes.length} moment{notes.length !== 1 ? 's' : ''}. 
                    <br/>Let's turn them into a beautiful chapter of your life.
                  </p>
                  <Button onClick={handleGenerateStory} size="lg" className="w-full shadow-xl shadow-primary/20">
@@ -179,10 +234,9 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
               </div>
             ) : (
               <div className="animate-fade-in">
-                 {/* Story Header */}
                  <div className="h-64 relative overflow-hidden">
                     <div className="absolute inset-0 bg-ink/20 z-10"></div>
-                    <img src={space.coverImage} className="w-full h-full object-cover" />
+                    <img src={space.coverImage} className="w-full h-full object-cover" alt="" />
                     <div className="absolute bottom-0 left-0 right-0 p-6 z-20 bg-gradient-to-t from-black/80 to-transparent">
                       <h1 className="text-3xl font-serif font-bold text-white leading-tight">{space.title}</h1>
                       <p className="text-white/80 text-sm mt-2 font-medium tracking-wide">{space.description}</p>
@@ -222,7 +276,6 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
                     ))}
                  </div>
                  
-                 {/* Floating Action Button to Regenerate */}
                  <div className="fixed bottom-6 right-6 z-30">
                     <Button onClick={handleGenerateStory} variant="primary" className="shadow-2xl flex gap-2">
                        <Sparkles className="h-4 w-4" /> Rewrite
@@ -236,4 +289,3 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
     </div>
   );
 };
-

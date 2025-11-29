@@ -1,19 +1,30 @@
 export enum NoteType {
-  AUDIO = 'AUDIO',
-  TEXT = 'TEXT',
-  IMAGE = 'IMAGE'
+  MOMENT = 'MOMENT'  // A moment can have text, images, videos, and audio all together
 }
 
 export interface Note {
   id: string;
   type: NoteType;
-  content: string; // Text content or Image URL (base64)
-  audioUrl?: string; // For playback
-  transcription?: string; // For audio notes
   timestamp: number;
-  location?: string;
-  title?: string;       // User editable title
-  description?: string; // User editable description
+  title?: string;
+  
+  // Text content / caption
+  textContent?: string;
+  
+  // Media attachments (can have multiple of each)
+  audioFileIds?: string[];       // Voice recordings (multiple allowed)
+  transcriptions?: string[];     // Auto-transcribed text for each audio
+  imageFileIds?: string[];       // Photos
+  videoFileIds?: string[];       // Videos
+}
+
+export interface MediaFile {
+  id: string;
+  blob: Blob;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: number;
 }
 
 export interface Chapter {
@@ -33,4 +44,3 @@ export interface StorySpace {
   generatedStory: Chapter[];
   isGenerating: boolean;
 }
-

@@ -51,10 +51,11 @@ export function useAudioRecording() {
     }
   }, []);
 
-  const stopRecording = useCallback((): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
+  const stopRecording = useCallback((): Promise<{ blob: Blob; id: string }> => {
+    return new Promise((resolve) => {
       if (!mediaRecorderRef.current || !isRecording) {
-        reject(new Error('No recording in progress'));
+        // Return empty blob if no recording
+        resolve({ blob: new Blob(), id: '' });
         return;
       }
 
@@ -72,7 +73,8 @@ export function useAudioRecording() {
           timerRef.current = null;
         }
 
-        resolve(blob);
+        // Return blob - the caller will save it to storage
+        resolve({ blob, id: '' });
       };
 
       mediaRecorder.stop();
@@ -93,4 +95,3 @@ export function useAudioRecording() {
     stopRecording
   };
 }
-

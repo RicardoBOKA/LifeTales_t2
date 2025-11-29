@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Note, NoteType, StorySpace } from '../types';
-import { createNote, getDefaultNoteTitle } from '../utils/noteHelpers';
+import { Note, NoteType } from '../types';
 
 export function useNotes(
   initialNotes: Note[],
@@ -8,15 +7,11 @@ export function useNotes(
 ) {
   const [notes, setNotes] = useState<Note[]>(initialNotes);
 
-  const addNote = useCallback((
-    type: NoteType,
-    content: string,
-    transcription?: string
-  ) => {
-    const noteData = createNote(type, content, transcription);
+  const addNote = useCallback((note: Omit<Note, 'id' | 'timestamp'>) => {
     const newNote: Note = {
-      id: Date.now().toString(),
-      ...noteData
+      ...note,
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
     };
 
     const updatedNotes = [newNote, ...notes];
@@ -51,4 +46,3 @@ export function useNotes(
     syncNotes
   };
 }
-

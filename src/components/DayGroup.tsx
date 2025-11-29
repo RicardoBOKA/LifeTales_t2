@@ -11,6 +11,7 @@ interface DayGroupProps {
   isCollapsed: boolean;
   onToggleCollapse: (dateKey: string) => void;
   onUpdateNote: (note: Note) => void;
+  onDeleteNote: (noteId: string) => void;
 }
 
 export const DayGroup: React.FC<DayGroupProps> = ({
@@ -19,7 +20,8 @@ export const DayGroup: React.FC<DayGroupProps> = ({
   startDate,
   isCollapsed,
   onToggleCollapse,
-  onUpdateNote
+  onUpdateNote,
+  onDeleteNote
 }) => {
   const firstNote = notes[0];
   const dayNumber = getDayNumber(startDate, firstNote.timestamp);
@@ -47,7 +49,8 @@ export const DayGroup: React.FC<DayGroupProps> = ({
              <NoteCard 
                 key={note.id} 
                 note={note} 
-                onUpdate={onUpdateNote} 
+                onUpdate={onUpdateNote}
+                onDelete={onDeleteNote}
              />
            ))}
         </div>
@@ -55,4 +58,3 @@ export const DayGroup: React.FC<DayGroupProps> = ({
     </div>
   );
 };
-

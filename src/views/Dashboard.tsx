@@ -1,14 +1,40 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StorySpace } from '../types';
-import { Plus, BookOpen, Clock, ChevronRight } from 'lucide-react';
+import { Plus, BookOpen, Clock, ChevronRight, Trash2, X } from 'lucide-react';
 
 interface DashboardProps {
   spaces: StorySpace[];
   onRequestCreate: () => void;
   onSelectSpace: (id: string) => void;
+  onDeleteSpace: (id: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, onSelectSpace }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, onSelectSpace, onDeleteSpace }) => {
+  const [deleteModal, setDeleteModal] = useState<{ id: string; title: string } | null>(null);
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (deleteModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [deleteModal]);
+
+  const handleDelete = (e: React.MouseEvent, space: StorySpace) => {
+    e.stopPropagation();
+    setDeleteModal({ id: space.id, title: space.title });
+  };
+
+  const confirmDelete = () => {
+    if (deleteModal) {
+      onDeleteSpace(deleteModal.id);
+      setDeleteModal(null);
+    }
+  };
   return (
     <div className="p-6 pb-24 space-y-8 animate-fade-in relative h-full overflow-y-auto">
       <header className="flex justify-between items-center">
@@ -47,7 +73,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, o
             <div 
               key={space.id}
               onClick={() => onSelectSpace(space.id)}
-              className="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow"
+              className="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow group relative"
             >
               <img 
                 src={space.coverImage} 
@@ -60,14 +86,63 @@ export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, o
                   <Clock className="h-3 w-3" />
                   <span>{new Date(space.startDate).toLocaleDateString()}</span>
                   <span>•</span>
-                  <span>{space.notes.length} moments</span>
+                  <span>{space.notes.length} moment{space.notes.length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
+              
+              <button
+                onClick={(e) => handleDelete(e, space)}
+                className="p-2 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Delete space"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
               <ChevronRight className="h-5 w-5 text-stone-300" />
             </div>
           ))
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => setDeleteModal(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 space-y-4">
+              <div className="text-center">
+                <div className="mx-auto w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mb-4">
+                  <Trash2 className="h-6 w-6 text-rose-600" />
+                </div>
+                <h3 className="text-lg font-bold text-ink mb-2">Delete Story?</h3>
+                <p className="text-sm text-stone-600">
+                  Are you sure you want to delete <strong>"{deleteModal.title}"</strong>? 
+                  This will permanently delete all moments and the generated story.
+                </p>
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setDeleteModal(null)}
+                  className="flex-1 px-4 py-2.5 border border-stone-300 rounded-lg hover:bg-stone-50 text-sm font-medium text-stone-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-4 py-2.5 bg-rose-500 hover:bg-rose-600 rounded-lg text-sm font-medium text-white"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

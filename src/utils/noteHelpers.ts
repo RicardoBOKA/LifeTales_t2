@@ -25,33 +25,5 @@ export const groupNotesByDate = (notes: Note[]): Record<string, Note[]> => {
  * Get default title based on note type
  */
 export const getDefaultNoteTitle = (type: NoteType): string => {
-  switch (type) {
-    case NoteType.AUDIO:
-      return 'Voice Note';
-    case NoteType.TEXT:
-      return 'Text Note';
-    case NoteType.IMAGE:
-      return 'Image Note';
-    default:
-      return 'Note';
-  }
+  return 'Moment';
 };
-
-/**
- * Create a new note
- */
-export const createNote = (
-  type: NoteType,
-  content: string,
-  transcription?: string
-): Omit<Note, 'id'> => {
-  return {
-    type,
-    content,
-    transcription,
-    timestamp: Date.now(),
-    title: getDefaultNoteTitle(type),
-    description: ''
-  };
-};
-

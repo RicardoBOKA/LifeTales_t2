@@ -18,14 +18,37 @@ export const generateStoryFromNotes = async (notes: Note[], spaceTitle: string):
     }];
   }
 
-  // Prepare context from notes
+  // Prepare context from notes with new structure
   const context = notes.map(n => {
-    let content = "";
-    if (n.type === NoteType.AUDIO) content = `[Voice Note]: ${n.transcription || '(No transcription)'}`;
-    else if (n.type === NoteType.TEXT) content = `[Text Note]: ${n.content}`;
-    else if (n.type === NoteType.IMAGE) content = `[Image uploaded at ${new Date(n.timestamp).toLocaleTimeString()}]`;
+    const parts: string[] = [];
+    const timestamp = new Date(n.timestamp).toLocaleString();
+    parts.push(timestamp);
     
-    return `Timestamp: ${new Date(n.timestamp).toLocaleString()}\n${content}`;
+    // Text content
+    if (n.textContent) {
+      parts.push(`Text: ${n.textContent}`);
+    }
+    
+    // Voice recordings (multiple)
+    if (n.audioFileIds && n.audioFileIds.length > 0) {
+      n.transcriptions?.forEach((transcription, idx) => {
+        parts.push(`Voice ${idx + 1}: ${transcription}`);
+      });
+    }
+    
+    // Images
+    if (n.imageFileIds && n.imageFileIds.length > 0) {
+      const count = n.imageFileIds.length;
+      parts.push(`[${count} Photo${count > 1 ? 's' : ''}]`);
+    }
+    
+    // Videos
+    if (n.videoFileIds && n.videoFileIds.length > 0) {
+      const count = n.videoFileIds.length;
+      parts.push(`[${count} Video${count > 1 ? 's' : ''}]`);
+    }
+    
+    return parts.join("\n");
   }).join("\n\n---\n\n");
 
   const prompt = `
@@ -74,4 +97,3 @@ export const generateStoryFromNotes = async (notes: Note[], spaceTitle: string):
     throw error;
   }
 };
-
