@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Google Cloud credentials (NEVER COMMIT THIS)
+google-credentials.json
+*.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+

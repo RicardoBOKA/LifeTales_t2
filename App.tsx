@@ -16,6 +16,7 @@ const App: React.FC = () => {
     updateSpace,
     deleteSpace,
     backToDashboard,
+    addDemoSpace,
     activeSpace
   } = useAppState();
 
@@ -48,6 +49,7 @@ const App: React.FC = () => {
             onRequestCreate={handleOpenCreateModal}
             onSelectSpace={selectSpace}
             onDeleteSpace={deleteSpace}
+            onCreateDemo={addDemoSpace}
           />
         );
       case 'SPACE_DETAIL':

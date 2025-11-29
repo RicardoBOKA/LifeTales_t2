@@ -92,6 +92,15 @@ export function useAppState() {
     }));
   }, [setState]);
 
+  const addDemoSpace = useCallback((demoSpace: StorySpace) => {
+    setState(prev => ({
+      ...prev,
+      spaces: [demoSpace, ...prev.spaces],
+      activeSpaceId: demoSpace.id,
+      view: 'SPACE_DETAIL'
+    }));
+  }, [setState]);
+
   // Get active space
   const activeSpace = state.spaces.find(s => s.id === state.activeSpaceId);
 
@@ -105,6 +114,7 @@ export function useAppState() {
     updateSpace,
     deleteSpace,
     backToDashboard,
+    addDemoSpace,
     activeSpace
   };
 }

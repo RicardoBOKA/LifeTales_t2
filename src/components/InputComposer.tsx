@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Image as ImageIcon, Mic, X, Loader2, Video as VideoIcon, Play, Maximize2 } from 'lucide-react';
+import { Send, Mic, X, Loader2, Play, Maximize2, Upload } from 'lucide-react';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { NoteType } from '../types';
 
@@ -27,8 +27,7 @@ export const InputComposer: React.FC<InputComposerProps> = ({ onSend, isProcessi
   const [audioPreviews, setAudioPreviews] = useState<string[]>([]);
   const [focusMedia, setFocusMedia] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
   
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   const { isRecording, duration, formatTime, startRecording, stopRecording } = useAudioRecording();
@@ -80,6 +79,52 @@ export const InputComposer: React.FC<InputComposerProps> = ({ onSend, isProcessi
     const previews = files.map(file => URL.createObjectURL(file));
     setVideoFiles([...videoFiles, ...files]);
     setVideoPreviews([...videoPreviews, ...previews]);
+    
+    if (e.target) e.target.value = '';
+  };
+
+  const handleAddAudioFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const blobs = files.map(file => new Blob([file], { type: file.type }));
+    const previews = files.map(file => URL.createObjectURL(file));
+    setAudioBlobs([...audioBlobs, ...blobs]);
+    setAudioPreviews([...audioPreviews, ...previews]);
+    
+    if (e.target) e.target.value = '';
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Separate files by type
+    const images = files.filter(f => f.type.startsWith('image/'));
+    const videos = files.filter(f => f.type.startsWith('video/'));
+    const audios = files.filter(f => f.type.startsWith('audio/'));
+
+    // Process images
+    if (images.length > 0) {
+      const previews = images.map(file => URL.createObjectURL(file));
+      setImageFiles([...imageFiles, ...images]);
+      setImagePreviews([...imagePreviews, ...previews]);
+    }
+
+    // Process videos
+    if (videos.length > 0) {
+      const previews = videos.map(file => URL.createObjectURL(file));
+      setVideoFiles([...videoFiles, ...videos]);
+      setVideoPreviews([...videoPreviews, ...previews]);
+    }
+
+    // Process audios
+    if (audios.length > 0) {
+      const blobs = audios.map(file => new Blob([file], { type: file.type }));
+      const previews = audios.map(file => URL.createObjectURL(file));
+      setAudioBlobs([...audioBlobs, ...blobs]);
+      setAudioPreviews([...audioPreviews, ...previews]);
+    }
     
     if (e.target) e.target.value = '';
   };
@@ -230,10 +275,16 @@ export const InputComposer: React.FC<InputComposerProps> = ({ onSend, isProcessi
                   <div 
                     key={index} 
                     className="relative aspect-square rounded overflow-hidden bg-stone-100 group cursor-pointer"
-                    onClick={() => setFocusMedia({ type: 'image', url })}
                   >
-                    <img src={url} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 flex items-center justify-center">
+                    <img 
+                      src={url} 
+                      alt={`Preview ${index + 1}`} 
+                      className="w-full h-full object-cover"
+                      onClick={() => setFocusMedia({ type: 'image', url })}
+                    />
+                    <div 
+                      className="absolute inset-0 bg-black/0 group-hover:bg-black/10 flex items-center justify-center pointer-events-none"
+                    >
                       <Maximize2 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100" />
                     </div>
                     <button 
@@ -245,7 +296,7 @@ export const InputComposer: React.FC<InputComposerProps> = ({ onSend, isProcessi
                     >
                       <X className="h-2.5 w-2.5" />
                     </button>
-                    <div className="absolute bottom-0.5 left-0.5 bg-black/60 text-white text-[9px] px-1 py-0.5 rounded">
+                    <div className="absolute bottom-0.5 left-0.5 bg-black/60 text-white text-[9px] px-1 py-0.5 rounded pointer-events-none">
                       IMG
                     </div>
                   </div>
@@ -260,10 +311,15 @@ export const InputComposer: React.FC<InputComposerProps> = ({ onSend, isProcessi
                   <div 
                     key={index} 
                     className="relative rounded overflow-hidden bg-black group cursor-pointer"
-                    onClick={() => setFocusMedia({ type: 'video', url })}
                   >
-                    <video src={url} className="w-full aspect-video object-cover" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center">
+                    <video 
+                      src={url} 
+                      className="w-full aspect-video object-cover"
+                      onClick={() => setFocusMedia({ type: 'video', url })}
+                    />
+                    <div 
+                      className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center pointer-events-none"
+                    >
                       <Play className="h-6 w-6 text-white opacity-70 group-hover:opacity-100" />
                     </div>
                     <button 
@@ -275,7 +331,7 @@ export const InputComposer: React.FC<InputComposerProps> = ({ onSend, isProcessi
                     >
                       <X className="h-2.5 w-2.5" />
                     </button>
-                    <div className="absolute bottom-0.5 left-0.5 bg-black/80 text-white text-[9px] px-1 py-0.5 rounded">
+                    <div className="absolute bottom-0.5 left-0.5 bg-black/80 text-white text-[9px] px-1 py-0.5 rounded pointer-events-none">
                       VIDEO
                     </div>
                   </div>
@@ -287,40 +343,21 @@ export const InputComposer: React.FC<InputComposerProps> = ({ onSend, isProcessi
 
         {/* Input Area */}
         <div className="flex items-center gap-1 p-1">
-          {/* Image Button */}
+          {/* Upload Button */}
           <button 
-            onClick={() => imageInputRef.current?.click()}
+            onClick={() => fileInputRef.current?.click()}
             disabled={isRecording || isProcessing}
             className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded shrink-0 disabled:opacity-50"
-            title="Add photos"
+            title="Upload files"
           >
-            <ImageIcon className="h-4 w-4" />
+            <Upload className="h-4 w-4" />
           </button>
           <input 
-            ref={imageInputRef}
+            ref={fileInputRef}
             type="file" 
             className="hidden"
-            accept="image/*"
-            onChange={handleImageSelect}
-            disabled={isRecording || isProcessing}
-            multiple
-          />
-
-          {/* Video Button */}
-          <button 
-            onClick={() => videoInputRef.current?.click()}
-            disabled={isRecording || isProcessing}
-            className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded shrink-0 disabled:opacity-50"
-            title="Add videos"
-          >
-            <VideoIcon className="h-4 w-4" />
-          </button>
-          <input 
-            ref={videoInputRef}
-            type="file" 
-            className="hidden"
-            accept="video/*"
-            onChange={handleVideoSelect}
+            accept="image/*,video/*,audio/*"
+            onChange={handleFileSelect}
             disabled={isRecording || isProcessing}
             multiple
           />

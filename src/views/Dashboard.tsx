@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { StorySpace } from '../types';
-import { Plus, BookOpen, Clock, ChevronRight, Trash2, X } from 'lucide-react';
+import { Plus, BookOpen, Clock, ChevronRight, Trash2, X, Sparkles } from 'lucide-react';
+import { createDemoStory } from '../utils/demoData';
 
 interface DashboardProps {
   spaces: StorySpace[];
   onRequestCreate: () => void;
   onSelectSpace: (id: string) => void;
   onDeleteSpace: (id: string) => void;
+  onCreateDemo?: (demoSpace: StorySpace) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, onSelectSpace, onDeleteSpace }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, onSelectSpace, onDeleteSpace, onCreateDemo }) => {
   const [deleteModal, setDeleteModal] = useState<{ id: string; title: string } | null>(null);
 
   // Prevent body scroll when modal is open
@@ -35,6 +37,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, o
       setDeleteModal(null);
     }
   };
+
+  const handleCreateDemo = () => {
+    if (onCreateDemo) {
+      const demoSpace = createDemoStory();
+      onCreateDemo(demoSpace);
+    }
+  };
   return (
     <div className="p-6 pb-24 space-y-8 animate-fade-in relative h-full overflow-y-auto">
       <header className="flex justify-between items-center">
@@ -43,6 +52,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ spaces, onRequestCreate, o
           <p className="text-stone-500 text-sm mt-1">Your memories, written for you.</p>
         </div>
       </header>
+
+      {/* Demo Story Button */}
+      {spaces.length === 0 && onCreateDemo && (
+        <div 
+          onClick={handleCreateDemo}
+          className="bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/20 p-6 rounded-3xl cursor-pointer group transition-all hover:border-primary/40 active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 bg-primary/20 rounded-full flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+              <Sparkles className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-ink mb-1">Try Demo Story</h3>
+              <p className="text-stone-600 text-sm">See how AI transforms moments into a story</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-primary group-hover:translate-x-1 transition-transform" />
+          </div>
+        </div>
+      )}
 
       {/* Hero / Create New */}
       <div 

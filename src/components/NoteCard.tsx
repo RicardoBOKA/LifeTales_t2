@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Note, NoteType } from '../types';
-import { Mic, Image as ImageIcon, Video as VideoIcon, Trash2, X, Plus } from 'lucide-react';
+import { Mic, Trash2, X, Plus, Upload } from 'lucide-react';
 import { formatTime } from '../utils/dateHelpers';
 import { fileStorage } from '../services/fileStorage';
 import { useAudioRecording } from '../hooks/useAudioRecording';
@@ -27,8 +27,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate, onDelete }) 
   
   const titleInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { isRecording, duration, formatTime: formatRecordingTime, startRecording, stopRecording } = useAudioRecording();
 
@@ -152,39 +151,110 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate, onDelete }) 
     if (e.target) e.target.value = '';
   };
 
-  const handleRecordAudio = async () => {
-    if (isRecording) {
-      try {
-        setIsProcessingAudio(true);
-        const result = await stopRecording();
-        const audioFileId = await fileStorage.saveFile(result.blob, `audio_${Date.now()}.webm`);
+  const handleAddAudios = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    try {
+      setIsProcessingAudio(true);
+      const newAudioIds: string[] = [];
+      const newTranscriptions: string[] = [];
+      
+      for (const file of files) {
+        // Save audio file
+        const audioFileId = await fileStorage.saveFile(file, file.name);
+        newAudioIds.push(audioFileId);
         
-        // Transcribe
+        // Transcribe audio
         const reader = new FileReader();
         const base64Promise = new Promise<string>((resolve) => {
           reader.onloadend = () => {
             const base64 = (reader.result as string).split(',')[1];
             resolve(base64);
           };
-          reader.readAsDataURL(result.blob);
+          reader.readAsDataURL(file);
         });
         
         const base64Audio = await base64Promise;
-        const transcription = await transcribeAudio(base64Audio, result.blob.type);
+        const transcription = await transcribeAudio(base64Audio, file.type);
+        newTranscriptions.push(transcription);
+      }
+      
+      const updatedAudioIds = [...(note.audioFileIds || []), ...newAudioIds];
+      const updatedTranscriptions = [...(note.transcriptions || []), ...newTranscriptions];
+      
+      onUpdate({
+        ...note,
+        audioFileIds: updatedAudioIds,
+        transcriptions: updatedTranscriptions
+      });
+    } catch (error) {
+      console.error('Failed to add audios:', error);
+      alert('Failed to add audio files. Please try again.');
+    } finally {
+      setIsProcessingAudio(false);
+    }
+    if (e.target) e.target.value = '';
+  };
+
+  const handleAddFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Separate files by type
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    const videoFiles = files.filter(f => f.type.startsWith('video/'));
+    const audioFiles = files.filter(f => f.type.startsWith('audio/'));
+
+    try {
+      // Process images
+      if (imageFiles.length > 0) {
+        const newImageIds = await Promise.all(
+          imageFiles.map(file => fileStorage.saveFile(file, file.name))
+        );
+        const updatedImageIds = [...(note.imageFileIds || []), ...newImageIds];
+        onUpdate({ ...note, imageFileIds: updatedImageIds });
+      }
+
+      // Process videos
+      if (videoFiles.length > 0) {
+        const newVideoIds = await Promise.all(
+          videoFiles.map(file => fileStorage.saveFile(file, file.name))
+        );
+        const updatedVideoIds = [...(note.videoFileIds || []), ...newVideoIds];
+        onUpdate({ ...note, videoFileIds: updatedVideoIds });
+      }
+
+      // Process audios - just save, no transcription
+      if (audioFiles.length > 0) {
+        const newAudioIds = await Promise.all(
+          audioFiles.map(file => fileStorage.saveFile(file, file.name))
+        );
+        const updatedAudioIds = [...(note.audioFileIds || []), ...newAudioIds];
+        onUpdate({ ...note, audioFileIds: updatedAudioIds });
+      }
+    } catch (error) {
+      console.error('Failed to add files:', error);
+      alert('Failed to add files. Please try again.');
+    }
+    if (e.target) e.target.value = '';
+  };
+
+  const handleRecordAudio = async () => {
+    if (isRecording) {
+      try {
+        const result = await stopRecording();
+        const audioFileId = await fileStorage.saveFile(result.blob, `audio_${Date.now()}.webm`);
         
         const updatedAudioIds = [...(note.audioFileIds || []), audioFileId];
-        const updatedTranscriptions = [...(note.transcriptions || []), transcription];
         
         onUpdate({
           ...note,
-          audioFileIds: updatedAudioIds,
-          transcriptions: updatedTranscriptions
+          audioFileIds: updatedAudioIds
         });
       } catch (error) {
         console.error('Recording failed:', error);
         alert('Recording failed. Please try again.');
-      } finally {
-        setIsProcessingAudio(false);
       }
     } else {
       try {
@@ -256,7 +326,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate, onDelete }) 
                     if (e.key === 'Enter') saveTitle();
                     if (e.key === 'Escape') setIsEditingTitle(false);
                   }}
-                  className="w-full font-bold text-ink text-sm border-b border-primary focus:outline-none bg-transparent p-0"
+                  className="w-full font-bold text-ink text-sm focus:outline-none bg-transparent p-0"
               />
             ) : (
               <h4 
@@ -284,7 +354,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate, onDelete }) 
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
               onBlur={saveText}
-              className="w-full text-sm text-ink whitespace-pre-wrap leading-relaxed mb-3 border-b border-primary focus:outline-none bg-transparent resize-none p-0 overflow-hidden"
+              className="w-full text-sm text-ink whitespace-pre-wrap leading-relaxed mb-3 focus:outline-none bg-transparent resize-none p-0 overflow-hidden"
               placeholder="Add a caption..."
               rows={1}
             />
@@ -398,37 +468,22 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate, onDelete }) 
           {/* Add Media Buttons */}
           <div className="flex gap-2 mt-3">
             <button
-              onClick={() => imageInputRef.current?.click()}
-              className="flex items-center gap-1 px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50 text-stone-600"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isProcessingAudio}
+              className="flex items-center gap-1 px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50 text-stone-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <ImageIcon className="h-3 w-3" />
-              Photo
+              <Upload className="h-3 w-3" />
+              Upload
             </button>
             <input
-              ref={imageInputRef}
+              ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*"
-              onChange={handleAddImages}
+              accept="image/*,video/*,audio/*"
+              onChange={handleAddFiles}
               className="hidden"
             />
-            
-            <button
-              onClick={() => videoInputRef.current?.click()}
-              className="flex items-center gap-1 px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50 text-stone-600"
-            >
-              <VideoIcon className="h-3 w-3" />
-              Video
-            </button>
-            <input
-              ref={videoInputRef}
-              type="file"
-              multiple
-              accept="video/*"
-              onChange={handleAddVideos}
-              className="hidden"
-            />
-            
+
             <button
               onClick={handleRecordAudio}
               disabled={isProcessingAudio}
@@ -446,7 +501,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onUpdate, onDelete }) 
               ) : (
                 <>
                   <Mic className="h-3 w-3" />
-                  Voice
+                  Record
                 </>
               )}
             </button>

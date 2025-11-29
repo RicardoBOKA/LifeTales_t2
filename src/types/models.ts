@@ -34,13 +34,31 @@ export interface Chapter {
   illustrationUrl?: string;
 }
 
+export interface VideoScene {
+  startTime: number;
+  duration: number;
+  narration: string;
+  visualDescription: string;
+  musicMood: string;
+}
+
+export interface VlogData {
+  title: string;
+  totalDuration: number;
+  scenes: VideoScene[];
+  musicPrompt: string;
+  voiceStyle: string;
+  generatedAt: number;
+}
+
 export interface StorySpace {
   id: string;
   title: string;
   description: string;
-  coverImage: string;
+  coverImage?: string;
   startDate: number;
   notes: Note[];
   generatedStory: Chapter[];
+  generatedVlog?: VlogData;
   isGenerating: boolean;
 }
