@@ -31,8 +31,13 @@ export interface Chapter {
   title: string;
   content: string;
   illustrationPrompt?: string;
-  illustrationUrl?: string;
+  sourceNoteId?: string;              // Reference to the source note
+  userImageIds?: string[];            // ALL images from this note (from fileStorage)
+  generatedImageUrl?: string;         // AI-generated image if no user images
 }
+
+// Generation workflow steps for UI feedback
+export type GenerationStep = 'idle' | 'analyzing' | 'writing' | 'images' | 'done';
 
 export interface StorySpace {
   id: string;

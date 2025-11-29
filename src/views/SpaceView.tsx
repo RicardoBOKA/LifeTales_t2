@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StorySpace, NoteType, Note } from '../types';
-import { ArrowLeft, Clock, Sparkles, Wand2 } from 'lucide-react';
+import { StorySpace, NoteType, Note, Chapter, GenerationStep } from '../types';
+import { ArrowLeft, Clock, Sparkles, Wand2, Image as ImageIcon, Search, PenTool, Palette, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../components/Button';
 import { InputComposer, NoteInput } from '../components/InputComposer';
 import { DayGroup } from '../components/DayGroup';
@@ -9,7 +9,254 @@ import { fileStorage } from '../services/fileStorage';
 import { useGroupedNotes } from '../hooks/useGroupedNotes';
 import { useNotes } from '../hooks/useNotes';
 import { useStoryGeneration } from '../hooks/useStoryGeneration';
+import { useSettings } from '../hooks/useSettings';
 import { formatDateKey } from '../utils/dateHelpers';
+
+/**
+ * Generation Workflow Steps Component
+ */
+const GenerationWorkflow: React.FC<{
+  step: GenerationStep;
+  progress: { current: number; total: number };
+}> = ({ step, progress }) => {
+  const steps = [
+    { id: 'analyzing', label: 'Analyzing notes', icon: Search },
+    { id: 'writing', label: 'Writing story', icon: PenTool },
+    { id: 'images', label: 'Generating images', icon: Palette },
+    { id: 'done', label: 'Complete!', icon: CheckCircle2 },
+  ];
+
+  const currentIndex = steps.findIndex(s => s.id === step);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center space-y-8">
+      <div className="relative">
+        <div className="absolute inset-0 bg-primary opacity-20 blur-xl rounded-full animate-pulse"></div>
+        <Wand2 className="h-16 w-16 text-primary relative z-10 animate-bounce" />
+      </div>
+      
+      <div className="space-y-2">
+        <h3 className="text-2xl font-serif font-bold text-ink">Crafting your story...</h3>
+        <p className="text-stone-500 text-sm max-w-xs mx-auto">
+          Our AI agents are transforming your moments into a beautiful narrative
+        </p>
+      </div>
+
+      {/* Step indicators */}
+      <div className="flex items-center gap-2 bg-stone-50 p-4 rounded-2xl">
+        {steps.map((s, idx) => {
+          const Icon = s.icon;
+          const isActive = s.id === step;
+          const isComplete = idx < currentIndex;
+          
+          return (
+            <React.Fragment key={s.id}>
+              <div className={`flex flex-col items-center gap-1 transition-all duration-300 ${
+                isActive ? 'scale-110' : ''
+              }`}>
+                <div className={`p-3 rounded-full transition-all duration-500 ${
+                  isComplete ? 'bg-green-500 text-white' :
+                  isActive ? 'bg-primary text-white animate-pulse' :
+                  'bg-stone-200 text-stone-400'
+                }`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <span className={`text-xs font-medium transition-colors ${
+                  isActive ? 'text-primary' : isComplete ? 'text-green-600' : 'text-stone-400'
+                }`}>
+                  {s.label}
+                </span>
+              </div>
+              {idx < steps.length - 1 && (
+                <div className={`h-0.5 w-8 transition-colors duration-500 ${
+                  isComplete ? 'bg-green-500' : 'bg-stone-200'
+                }`} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {/* Progress indicator for images step */}
+      {step === 'images' && progress.total > 0 && (
+        <div className="w-full max-w-xs space-y-2">
+          <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+              style={{ width: `${(progress.current / progress.total) * 100}%` }}
+            />
+          </div>
+          <p className="text-xs text-stone-500">
+            Generating illustration {progress.current} of {progress.total}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Image Gallery Component for chapters with multiple images
+ */
+const ImageGallery: React.FC<{
+  userImageIds: string[];
+  generatedImageUrl?: string;
+}> = ({ userImageIds, generatedImageUrl }) => {
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadImages = async () => {
+      setLoading(true);
+      const urls: string[] = [];
+      
+      // Load user images
+      for (const id of userImageIds) {
+        const url = await fileStorage.getFileUrl(id);
+        if (url) urls.push(url);
+      }
+      
+      // Add generated image if no user images
+      if (urls.length === 0 && generatedImageUrl) {
+        urls.push(generatedImageUrl);
+      }
+      
+      setImageUrls(urls);
+      setLoading(false);
+    };
+    
+    loadImages();
+  }, [userImageIds, generatedImageUrl]);
+
+  if (loading) {
+    return (
+      <div className="aspect-[4/3] bg-stone-100 rounded-2xl animate-pulse flex items-center justify-center">
+        <Sparkles className="h-6 w-6 text-stone-300" />
+      </div>
+    );
+  }
+
+  if (imageUrls.length === 0) {
+    return null;
+  }
+
+  const hasMultiple = imageUrls.length > 1;
+  const isUserImage = userImageIds.length > 0;
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden shadow-lg border-4 border-white">
+      {/* Main image */}
+      <img 
+        src={imageUrls[currentIndex]} 
+        className="w-full h-auto object-cover aspect-[4/3]" 
+        alt={isUserImage ? 'Your photo' : 'AI illustration'} 
+      />
+      
+      {/* Navigation arrows for multiple images */}
+      {hasMultiple && (
+        <>
+          <button 
+            onClick={() => setCurrentIndex(i => (i - 1 + imageUrls.length) % imageUrls.length)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <button 
+            onClick={() => setCurrentIndex(i => (i + 1) % imageUrls.length)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+          
+          {/* Dots indicator */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {imageUrls.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentIndex(idx)}
+                className={`h-2 rounded-full transition-all ${
+                  idx === currentIndex ? 'w-6 bg-white' : 'w-2 bg-white/50'
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+      
+      {/* Badge showing image source */}
+      <div className={`absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${
+        isUserImage ? 'bg-blue-500/90 text-white' : 'bg-purple-500/90 text-white'
+      }`}>
+        {isUserImage ? (
+          <><ImageIcon className="h-3 w-3" /> {imageUrls.length} photo{imageUrls.length > 1 ? 's' : ''}</>
+        ) : (
+          <><Sparkles className="h-3 w-3" /> AI generated</>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Chapter Card Component
+ */
+const ChapterCard: React.FC<{
+  chapter: Chapter;
+  index: number;
+  sourceNote?: Note;
+  isLast: boolean;
+  isGenerating: boolean;
+}> = ({ chapter, index, sourceNote, isLast, isGenerating }) => {
+  const timestamp = sourceNote ? new Date(sourceNote.timestamp).toLocaleString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  }) : null;
+
+  return (
+    <article className="space-y-5">
+      {/* Chapter header */}
+      <div className="flex items-start gap-4">
+        <span className="text-5xl font-serif text-primary/15 font-bold leading-none">{index + 1}</span>
+        <div className="flex-1 pt-2">
+          <h2 className="text-xl font-serif font-bold text-ink leading-tight">{chapter.title}</h2>
+          {timestamp && (
+            <p className="text-xs text-stone-400 mt-1 flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {timestamp}
+            </p>
+          )}
+        </div>
+      </div>
+      
+      {/* Images */}
+      <ImageGallery 
+        userImageIds={chapter.userImageIds || []} 
+        generatedImageUrl={chapter.generatedImageUrl}
+      />
+
+      {/* Content */}
+      <div className="prose prose-stone prose-p:font-serif prose-p:text-lg prose-p:leading-relaxed text-ink/90 prose-p:mb-4">
+        {chapter.content.split('\n').filter(p => p.trim()).map((para, i) => (
+          <p key={i}>{para}</p>
+        ))}
+      </div>
+      
+      {/* Separator */}
+      {!isLast && (
+        <div className="flex justify-center py-6">
+          <div className="flex items-center gap-3">
+            <div className="h-px w-12 bg-stone-200"></div>
+            <div className="h-2 w-2 bg-primary/30 rounded-full"></div>
+            <div className="h-px w-12 bg-stone-200"></div>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+};
 
 interface SpaceViewProps {
   space: StorySpace;
@@ -22,13 +269,23 @@ type Tab = 'TIMELINE' | 'STORY';
 export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpace }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TIMELINE');
   const [isProcessingNote, setIsProcessingNote] = useState(false);
+  
+  // Get current story generation settings
+  const { settings } = useSettings();
 
   const { notes, addNote, updateNote, deleteNote, syncNotes } = useNotes(
     space.notes,
     (updatedNotes) => onUpdateSpace({ ...space, notes: updatedNotes })
   );
 
-  const { chapters, isGenerating, generateStory, syncChapters } = useStoryGeneration(
+  const { 
+    chapters, 
+    isGenerating, 
+    generationStep,
+    generationProgress,
+    generateStory, 
+    syncChapters 
+  } = useStoryGeneration(
     space.generatedStory,
     (updatedChapters) => onUpdateSpace({ ...space, generatedStory: updatedChapters })
   );
@@ -129,7 +386,8 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
   const handleGenerateStory = async () => {
     setActiveTab('STORY');
     try {
-      await generateStory(notes, space.title);
+      // Pass settings to the story generation pipeline
+      await generateStory(notes, space.title, settings);
     } catch (e) {
       console.error(e);
       alert("Failed to generate story. Please try again.");
@@ -207,19 +465,11 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
         {/* TAB: STORY */}
         {activeTab === 'STORY' && (
           <div className="min-h-full bg-white">
-            {isGenerating && chapters.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-6">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-primary opacity-20 blur-xl rounded-full animate-pulse-slow"></div>
-                  <Wand2 className="h-12 w-12 text-primary relative z-10 animate-pulse" />
-                </div>
-                <div>
-                   <h3 className="text-xl font-serif font-bold">Weaving your story...</h3>
-                   <p className="text-stone-500 mt-2 text-sm">Our AI agents are organizing your memories, writing chapters, and painting illustrations.</p>
-                </div>
-              </div>
+            {/* Show workflow when generating */}
+            {isGenerating && generationStep !== 'idle' && generationStep !== 'done' ? (
+              <GenerationWorkflow step={generationStep} progress={generationProgress} />
             ) : chapters.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full p-12 text-center">
+              <div className="flex flex-col items-center justify-center min-h-[60vh] p-12 text-center">
                  <div className="bg-soft p-6 rounded-full mb-6">
                     <Sparkles className="h-8 w-8 text-primary" />
                  </div>
@@ -234,51 +484,46 @@ export const SpaceView: React.FC<SpaceViewProps> = ({ space, onBack, onUpdateSpa
               </div>
             ) : (
               <div className="animate-fade-in">
+                 {/* Story header */}
                  <div className="h-64 relative overflow-hidden">
                     <div className="absolute inset-0 bg-ink/20 z-10"></div>
                     <img src={space.coverImage} className="w-full h-full object-cover" alt="" />
                     <div className="absolute bottom-0 left-0 right-0 p-6 z-20 bg-gradient-to-t from-black/80 to-transparent">
                       <h1 className="text-3xl font-serif font-bold text-white leading-tight">{space.title}</h1>
                       <p className="text-white/80 text-sm mt-2 font-medium tracking-wide">{space.description}</p>
+                      <p className="text-white/60 text-xs mt-2">
+                        {chapters.length} section{chapters.length !== 1 ? 's' : ''} • {notes.length} moment{notes.length !== 1 ? 's' : ''}
+                      </p>
                     </div>
                  </div>
 
-                 <div className="p-8 space-y-12 pb-32">
-                    {chapters.map((chapter, idx) => (
-                      <article key={idx} className="space-y-6">
-                         <div className="flex items-center gap-4">
-                           <span className="text-4xl font-serif text-primary/20 font-bold">{idx + 1}</span>
-                           <h2 className="text-xl font-serif font-bold text-ink">{chapter.title}</h2>
-                         </div>
-                         
-                         {chapter.illustrationUrl ? (
-                           <div className="rounded-2xl overflow-hidden shadow-lg transform rotate-1 border-4 border-white">
-                              <img src={chapter.illustrationUrl} className="w-full h-auto object-cover" alt="AI illustration" />
-                           </div>
-                         ) : isGenerating ? (
-                           <div className="aspect-[4/3] bg-stone-100 rounded-2xl animate-pulse flex items-center justify-center">
-                              <Sparkles className="h-6 w-6 text-stone-300" />
-                           </div>
-                         ) : null}
-
-                         <div className="prose prose-stone prose-p:font-serif prose-p:text-lg prose-p:leading-relaxed text-ink/90">
-                            {chapter.content.split('\n').map((para, i) => (
-                              <p key={i}>{para}</p>
-                            ))}
-                         </div>
-                         
-                         {idx < chapters.length - 1 && (
-                           <div className="flex justify-center py-4">
-                             <div className="h-1 w-16 bg-stone-200 rounded-full"></div>
-                           </div>
-                         )}
-                      </article>
-                    ))}
+                 {/* Chapters */}
+                 <div className="p-8 space-y-4 pb-32">
+                    {chapters.map((chapter, idx) => {
+                      const sourceNote = notes.find(n => n.id === chapter.sourceNoteId);
+                      return (
+                        <ChapterCard
+                          key={chapter.sourceNoteId || idx}
+                          chapter={chapter}
+                          index={idx}
+                          sourceNote={sourceNote}
+                          isLast={idx === chapters.length - 1}
+                          isGenerating={isGenerating}
+                        />
+                      );
+                    })}
                  </div>
                  
+                 {/* Regenerate button */}
                  <div className="fixed bottom-6 right-6 z-30">
-                    <Button onClick={handleGenerateStory} variant="primary" className="shadow-2xl flex gap-2">
-                       <Sparkles className="h-4 w-4" /> Rewrite
+                    <Button 
+                      onClick={handleGenerateStory} 
+                      variant="primary" 
+                      className="shadow-2xl flex gap-2"
+                      disabled={isGenerating}
+                    >
+                       <Sparkles className={`h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} /> 
+                       {isGenerating ? 'Rewriting...' : 'Rewrite'}
                     </Button>
                  </div>
               </div>
